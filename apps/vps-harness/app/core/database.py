@@ -11,8 +11,10 @@ from app.models.entities import (
     CronJob,
     EmailDraft,
     Habit,
+    MemoryFact,
     Note,
     TunnelJob,
+    VpsNode,
 )
 
 settings = get_settings()
@@ -40,12 +42,50 @@ async def init_db_and_seed() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
     vault = VaultService()
+    now = utc_now_iso()
     async with AsyncSessionLocal() as session:
+        existing_vps = (await session.execute(select(VpsNode).limit(1))).scalar_one_or_none()
+        if existing_vps is None:
+            session.add(
+                VpsNode(
+                    id="vps_hetzner_main",
+                    name="hetzner-main",
+                    host="46.224.103.31",
+                    ssh_port=22,
+                    provider="Hetzner",
+                    specs="16GB RAM / 80GB NVMe (CPU)",
+                    coolify_url="http://46.224.103.31:8000",
+                    services_json=["EYE Aurion (:3011)", "PostgreSQL (Private)", "Evolution API"],
+                    status="ONLINE",
+                    notes_md="Nó principal gerenciado pelo Coolify para o domínio https://eyeglobal.aurionagency.com.br.",
+                    updated_at=now,
+                )
+            )
+            session.add_all([
+                MemoryFact(
+                    id="mem_seed_01",
+                    scope="vps:hetzner-main",
+                    fact_text="VPS principal Hetzner 16GB/80GB sem GPU; usar Adaptive Router com APIs gratuitas (Groq, Gemini, OpenRouter Hermes 3) em vez de LLM local pesado.",
+                    tags_json=["hetzner", "coolify", "infra"],
+                    importance=9,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                MemoryFact(
+                    id="mem_seed_02",
+                    scope="project:aurion",
+                    fact_text="Gateway unificado do EYE Aurion escuta internamente na porta 3011 e publica em https://eyeglobal.aurionagency.com.br.",
+                    tags_json=["aurion", "deploy", "porta-3011"],
+                    importance=9,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ])
+            await session.commit()
+
         existing = (await session.execute(select(AgentTask).limit(1))).scalar_one_or_none()
         if existing is not None:
             return
-
-        now = utc_now_iso()
         session.add_all([
             AgentTask(
                 id="t_933e5433",

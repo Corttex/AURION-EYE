@@ -11,6 +11,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal, utc_now_iso
+from app.core.memory_service import (
+    append_timeline_entry,
+    list_memory_markdown_files,
+    recall_relevant_context,
+    remember_fact,
+    sync_vps_markdown,
+)
 from app.core.security import VaultService, require_auth
 from app.core.voice_service import synthesize_speech_mp3, transcribe_audio_groq
 from app.models.entities import (
@@ -18,9 +25,12 @@ from app.models.entities import (
     ConnectorSecret,
     CronJob,
     EmailDraft,
+    ExecutionCheckpoint,
     Habit,
+    MemoryFact,
     Note,
     TunnelJob,
+    VpsNode,
 )
 from app.router.adaptive_router import AurionAdaptiveRouter, TaskType, classify_task_intent
 
@@ -619,16 +629,39 @@ async def chat_completion(body: ChatReq) -> Dict[str, Any]:
             })
             return {"content": reply, "provider_used": "aurion-voice-intent", "task_type": "FAST_VOICE", "task": created}
 
+    # Voice / quick intent: save persistent fact in 3-layer memory
+    for trigger in ("lembre que:", "lembre que", "memorize:", "memorize"):
+        if lower_msg.startswith(trigger):
+            fact_content = body.message[len(trigger):].strip(" :,-") or body.message
+            saved = await remember_fact(fact_content, scope="global", tags=["voz"], importance=7)
+            reply = f"Memorizado na camada persistente: {saved['fact_text']}"
+            await tunnel.broadcast({
+                "type": "CHAT_STREAM_CHUNK",
+                "session_id": body.session_id,
+                "chunk": reply,
+                "done": True,
+                "provider_used": "aurion-memory-vault",
+            })
+            return {"content": reply, "provider_used": "aurion-memory-vault", "task_type": "FAST_VOICE", "memory": saved}
+
     task_type = classify_task_intent(body.message)
+    mem_ctx = await recall_relevant_context(body.message, limit=6)
+    system_prompt = "Você é o AURION, orquestrador digital conciso em PT-BR."
+    if mem_ctx["context_block"]:
+        system_prompt += f"\n\nUse o contexto de infraestrutura e memória persistente abaixo quando relevante:\n{mem_ctx['context_block']}"
 
     await tunnel.broadcast({"type": "EYE_STATE", "state": "THINKING"})
     res = await adaptive.route_completion(
         messages=[
-            {"role": "system", "content": "Você é o AURION, orquestrador digital conciso em PT-BR."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": body.message},
         ],
         task_type=task_type,
         force_claude=body.force_claude,
+    )
+    append_timeline_entry(
+        f"Chat ({res['provider_used']}): {body.message[:120]}",
+        category="CHAT",
     )
     await tunnel.broadcast({
         "type": "CHAT_STREAM_CHUNK",
@@ -784,3 +817,233 @@ async def incoming_webhook(slug: str, payload: Dict[str, Any]) -> Dict[str, Any]
     tunnel.add_log("INFO", "EVOLUTION_API" if "evo" in slug else "VPS", f"Webhook recebido: {slug}")
     await tunnel.broadcast({"type": "TASK_UPDATED", "task": _serialize_task(task)})
     return {"accepted": True, "task_id": task.id}
+
+
+# === 3-LAYER MEMORY, MULTI-VPS INVENTORY & EXECUTION CHECKPOINTS ===
+class MemoryFactCreate(BaseModel):
+    fact_text: str
+    scope: str = "global"
+    tags: List[str] = []
+    importance: int = 5
+
+
+@router.get("/memory/facts")
+async def list_memory_facts(scope: Optional[str] = None) -> List[Dict[str, Any]]:
+    async with AsyncSessionLocal() as session:
+        stmt = select(MemoryFact)
+        if scope:
+            stmt = stmt.where(MemoryFact.scope == scope)
+        rows = (await session.execute(stmt)).scalars().all()
+        return [
+            {
+                "id": f.id,
+                "scope": f.scope,
+                "fact_text": f.fact_text,
+                "tags": f.tags_json or [],
+                "importance": f.importance,
+                "created_at": f.created_at,
+                "updated_at": f.updated_at,
+            }
+            for f in rows
+        ]
+
+
+@router.post("/memory/facts")
+async def create_memory_fact(body: MemoryFactCreate) -> Dict[str, Any]:
+    return await remember_fact(
+        fact_text=body.fact_text,
+        scope=body.scope,
+        tags=body.tags,
+        importance=body.importance,
+    )
+
+
+@router.get("/memory/context")
+async def get_memory_context(q: str = "", limit: int = 6) -> Dict[str, Any]:
+    return await recall_relevant_context(query=q, limit=limit)
+
+
+@router.get("/memory/files")
+async def get_memory_markdown_files() -> List[Dict[str, Any]]:
+    return list_memory_markdown_files()
+
+
+class VpsNodeUpsert(BaseModel):
+    name: str
+    host: str
+    ssh_port: int = 22
+    provider: str = "Hetzner"
+    specs: str = "16GB RAM / 80GB NVMe"
+    coolify_url: str = ""
+    services: List[str] = []
+    status: str = "ONLINE"
+    notes_md: str = ""
+
+
+@router.get("/vps")
+async def list_vps_nodes() -> List[Dict[str, Any]]:
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(select(VpsNode))).scalars().all()
+        return [
+            {
+                "id": v.id,
+                "name": v.name,
+                "host": v.host,
+                "ssh_port": v.ssh_port,
+                "provider": v.provider,
+                "specs": v.specs,
+                "coolify_url": v.coolify_url,
+                "services": v.services_json or [],
+                "status": v.status,
+                "notes_md": v.notes_md,
+                "updated_at": v.updated_at,
+            }
+            for v in rows
+        ]
+
+
+@router.post("/vps")
+async def upsert_vps_node(body: VpsNodeUpsert) -> Dict[str, Any]:
+    now = utc_now_iso()
+    async with AsyncSessionLocal() as session:
+        existing = (
+            await session.execute(select(VpsNode).where(VpsNode.name == body.name))
+        ).scalar_one_or_none()
+        if existing:
+            existing.host = body.host
+            existing.ssh_port = body.ssh_port
+            existing.provider = body.provider
+            existing.specs = body.specs
+            existing.coolify_url = body.coolify_url
+            existing.services_json = body.services
+            existing.status = body.status
+            existing.notes_md = body.notes_md
+            existing.updated_at = now
+            node = existing
+        else:
+            node = VpsNode(
+                id=f"vps_{uuid.uuid4().hex[:8]}",
+                name=body.name,
+                host=body.host,
+                ssh_port=body.ssh_port,
+                provider=body.provider,
+                specs=body.specs,
+                coolify_url=body.coolify_url,
+                services_json=body.services,
+                status=body.status,
+                notes_md=body.notes_md,
+                updated_at=now,
+            )
+            session.add(node)
+        await session.commit()
+
+    sync_vps_markdown(node)
+    append_timeline_entry(f"VPS registrada/atualizada: {node.name} ({node.host})", category="VPS")
+    return {
+        "id": node.id,
+        "name": node.name,
+        "host": node.host,
+        "ssh_port": node.ssh_port,
+        "provider": node.provider,
+        "specs": node.specs,
+        "coolify_url": node.coolify_url,
+        "services": node.services_json or [],
+        "status": node.status,
+        "notes_md": node.notes_md,
+        "updated_at": node.updated_at,
+    }
+
+
+class CheckpointCreate(BaseModel):
+    goal: str
+    steps: List[str]
+    task_id: str = ""
+    state: Dict[str, Any] = {}
+
+
+class CheckpointAdvance(BaseModel):
+    current_step: Optional[int] = None
+    status: Optional[str] = None
+    state_patch: Dict[str, Any] = {}
+    note: str = ""
+
+
+@router.get("/checkpoints")
+async def list_checkpoints() -> List[Dict[str, Any]]:
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(select(ExecutionCheckpoint))).scalars().all()
+        return [
+            {
+                "id": cp.id,
+                "task_id": cp.task_id,
+                "goal": cp.goal,
+                "current_step": cp.current_step,
+                "total_steps": cp.total_steps,
+                "steps": cp.steps_json or [],
+                "state": cp.state_json or {},
+                "status": cp.status,
+                "updated_at": cp.updated_at,
+            }
+            for cp in rows
+        ]
+
+
+@router.post("/checkpoints")
+async def create_checkpoint(body: CheckpointCreate) -> Dict[str, Any]:
+    now = utc_now_iso()
+    cp = ExecutionCheckpoint(
+        id=f"cp_{uuid.uuid4().hex[:8]}",
+        task_id=body.task_id,
+        goal=body.goal,
+        current_step=0,
+        total_steps=max(1, len(body.steps)),
+        steps_json=body.steps,
+        state_json=body.state,
+        status="RUNNING",
+        updated_at=now,
+    )
+    async with AsyncSessionLocal() as session:
+        session.add(cp)
+        await session.commit()
+    append_timeline_entry(f"Checkpoint iniciado: {cp.goal} ({cp.total_steps} passos)", category="CHECKPOINT")
+    return {
+        "id": cp.id,
+        "task_id": cp.task_id,
+        "goal": cp.goal,
+        "current_step": cp.current_step,
+        "total_steps": cp.total_steps,
+        "steps": cp.steps_json,
+        "state": cp.state_json,
+        "status": cp.status,
+        "updated_at": cp.updated_at,
+    }
+
+
+@router.post("/checkpoints/{checkpoint_id}/advance")
+async def advance_checkpoint(checkpoint_id: str, body: CheckpointAdvance) -> Dict[str, Any]:
+    now = utc_now_iso()
+    async with AsyncSessionLocal() as session:
+        cp = await session.get(ExecutionCheckpoint, checkpoint_id)
+        if not cp:
+            raise HTTPException(status_code=404, detail="Checkpoint não encontrado")
+        next_step = body.current_step if body.current_step is not None else min(cp.total_steps, cp.current_step + 1)
+        cp.current_step = next_step
+        merged_state = dict(cp.state_json or {})
+        merged_state.update(body.state_patch)
+        cp.state_json = merged_state
+        cp.status = body.status or ("DONE" if next_step >= cp.total_steps else "RUNNING")
+        cp.updated_at = now
+        await session.commit()
+    append_timeline_entry(
+        f"Checkpoint {cp.id} ({cp.status}) passo {cp.current_step}/{cp.total_steps}: {body.note or cp.goal}",
+        category="CHECKPOINT",
+    )
+    return {
+        "id": cp.id,
+        "goal": cp.goal,
+        "current_step": cp.current_step,
+        "total_steps": cp.total_steps,
+        "state": cp.state_json,
+        "status": cp.status,
+        "updated_at": cp.updated_at,
+    }

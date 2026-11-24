@@ -102,3 +102,45 @@ class ProviderMetric(Base):
     total_calls: Mapped[int] = mapped_column(Integer, default=0)
     failed_calls: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class VpsNode(Base):
+    __tablename__ = "vps_nodes"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    host: Mapped[str] = mapped_column(String(180), nullable=False)
+    ssh_port: Mapped[int] = mapped_column(Integer, default=22)
+    provider: Mapped[str] = mapped_column(String(64), default="Hetzner")
+    specs: Mapped[str] = mapped_column(String(160), default="16GB RAM / 80GB NVMe")
+    coolify_url: Mapped[str] = mapped_column(String(240), default="")
+    services_json: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(32), default="ONLINE", index=True)
+    notes_md: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[str] = mapped_column(String(40), server_default=func.datetime("now"))
+
+
+class MemoryFact(Base):
+    __tablename__ = "memory_facts"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    scope: Mapped[str] = mapped_column(String(120), default="global", index=True)
+    fact_text: Mapped[str] = mapped_column(Text, nullable=False)
+    tags_json: Mapped[list] = mapped_column(JSON, default=list)
+    importance: Mapped[int] = mapped_column(Integer, default=5)
+    created_at: Mapped[str] = mapped_column(String(40), server_default=func.datetime("now"))
+    updated_at: Mapped[str] = mapped_column(String(40), server_default=func.datetime("now"))
+
+
+class ExecutionCheckpoint(Base):
+    __tablename__ = "execution_checkpoints"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(48), default="", index=True)
+    goal: Mapped[str] = mapped_column(String(280), nullable=False)
+    current_step: Mapped[int] = mapped_column(Integer, default=0)
+    total_steps: Mapped[int] = mapped_column(Integer, default=1)
+    steps_json: Mapped[list] = mapped_column(JSON, default=list)
+    state_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(32), default="RUNNING", index=True)
+    updated_at: Mapped[str] = mapped_column(String(40), server_default=func.datetime("now"))

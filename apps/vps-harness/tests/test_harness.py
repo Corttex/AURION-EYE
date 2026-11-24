@@ -93,3 +93,31 @@ def test_api_endpoints_and_websocket_tunnel():
             first = ws.receive_json()
             assert first["type"] == "GATEWAY_STATE"
             assert first["payload"]["gateway_status"] == "ATIVO"
+
+        # 3-Layer Memory, Multi-VPS & Execution Checkpoints
+        mem_resp = client.post(
+            "/api/memory/facts",
+            headers=headers,
+            json={"fact_text": "VPS Secundária roda Docker Swarm na porta 2375", "scope": "vps:worker-02", "importance": 8},
+        )
+        assert mem_resp.status_code == 200
+
+        ctx = client.get("/api/memory/context?q=hetzner", headers=headers)
+        assert ctx.status_code == 200
+        assert "hetzner-main" in ctx.json()["context_block"]
+
+        cp = client.post(
+            "/api/checkpoints",
+            headers=headers,
+            json={"goal": "Deploy Evolution API", "steps": ["DNS", "Coolify", "QR Code"]},
+        )
+        assert cp.status_code == 200
+        cp_id = cp.json()["id"]
+
+        adv = client.post(
+            f"/api/checkpoints/{cp_id}/advance",
+            headers=headers,
+            json={"note": "DNS apontado"},
+        )
+        assert adv.status_code == 200
+        assert adv.json()["current_step"] == 1

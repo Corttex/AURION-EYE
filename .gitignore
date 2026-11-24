@@ -22,3 +22,4 @@ apps/desktop-eye/src-tauri/target/
 # Logs & temp
 *.log
 downloads/
+memory_vault/
