@@ -41,12 +41,21 @@ DEFAULT_PROVIDERS: List[ProviderNode] = [
     ),
     ProviderNode(
         id="gemini_flash_vision",
-        name="Google AI Studio (Gemini 2.5 Flash)",
+        name="Google AI Studio (Gemini Flash Latest)",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        model="gemini-2.5-flash",
+        model="gemini-flash-latest",
         api_key_vault_ref="GEMINI_API_KEY",
         supported_tasks=[TaskType.VISION_GUI, TaskType.GENERAL, TaskType.FAST_VOICE],
         priority=1,
+    ),
+    ProviderNode(
+        id="cloudflare_workers_ai",
+        name="Cloudflare Workers AI (Qwen 3.8 27B Free)",
+        base_url="https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions",
+        model="@cf/qwen/qwen3.8-27b",
+        api_key_vault_ref="CLOUDFLARE_API_TOKEN",
+        supported_tasks=[TaskType.VISION_GUI, TaskType.GENERAL, TaskType.CODING],
+        priority=2,
     ),
     ProviderNode(
         id="sambanova_fast",
@@ -238,6 +247,13 @@ class AurionAdaptiveRouter:
             if not api_key:
                 continue
 
+            target_url = provider.base_url
+            if "{account_id}" in target_url:
+                account_id = await self.get_secret("CLOUDFLARE_ACCOUNT_ID")
+                if not account_id:
+                    continue
+                target_url = target_url.replace("{account_id}", account_id.strip())
+
             attempted += 1
             start = time.perf_counter()
             try:
@@ -247,6 +263,7 @@ class AurionAdaptiveRouter:
                     messages=messages,
                     json_mode=json_mode,
                     temperature=temperature,
+                    target_url=target_url,
                 )
                 latency = (time.perf_counter() - start) * 1000
                 self._update_score(provider, success=True, latency_ms=latency)
@@ -334,6 +351,7 @@ class AurionAdaptiveRouter:
         messages: List[Dict[str, Any]],
         json_mode: bool,
         temperature: float,
+        target_url: Optional[str] = None,
     ) -> str:
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -348,7 +366,7 @@ class AurionAdaptiveRouter:
             payload["response_format"] = {"type": "json_object"}
 
         async with httpx.AsyncClient(timeout=35.0) as client:
-            resp = await client.post(provider.base_url, headers=headers, json=payload)
+            resp = await client.post(target_url or provider.base_url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]
