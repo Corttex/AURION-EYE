@@ -1,0 +1,60 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: aurion-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+
+  vps-harness:
+    build:
+      context: ./apps/vps-harness
+      dockerfile: Dockerfile
+    container_name: aurion-vps-harness
+    restart: unless-stopped
+    depends_on:
+      - redis
+    expose:
+      - "8000"
+    environment:
+      - AURION_TOKEN=${AURION_TOKEN:-aurion-dev-secret-token-2026}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite+aiosqlite:////data/aurion_vps.db
+      - MASTER_KEY_FILE=/data/.aurion_master.key
+      - CLAUDE_DAILY_CAP=${CLAUDE_DAILY_CAP:-15}
+    volumes:
+      - vps_data:/data
+
+  web-main:
+    build:
+      context: .
+      dockerfile: ./apps/web-main/Dockerfile
+    container_name: aurion-web-main
+    restart: unless-stopped
+    depends_on:
+      - vps-harness
+    expose:
+      - "3011"
+    environment:
+      - PORT=3011
+      - NEXT_PUBLIC_VPS_HTTP_URL=
+      - NEXT_PUBLIC_VPS_WS_URL=
+      - NEXT_PUBLIC_AURION_TOKEN=
+
+  gateway:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile.gateway
+    container_name: aurion-gateway
+    restart: unless-stopped
+    depends_on:
+      - vps-harness
+      - web-main
+    ports:
+      - "3011:3011"
+
+volumes:
+  redis_data:
+  vps_data:

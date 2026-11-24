@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+apps/vps-harness/.venv/
+__pycache__/
+*.py[cod]
+
+# Builds
+dist/
+.next/
+out/
+target/
+apps/desktop-eye/src-tauri/target/
+
+# Local secrets & databases
+.env
+*.db
+*.db-wal
+*.db-shm
+.aurion_master.key
+
+# Logs & temp
+*.log
+downloads/

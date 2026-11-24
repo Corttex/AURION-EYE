@@ -1,0 +1,23 @@
+{
+  "name": "aurion-ecosystem",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AURION Hybrid Ecosystem: VPS Harness + Desktop Eye (Tauri v2) + Rede MAIN (Next.js) + Chrome Bridge",
+  "scripts": {
+    "dev:web": "pnpm --filter web-main dev",
+    "dev:eye": "pnpm --filter desktop-eye dev",
+    "dev:vps": "cd apps/vps-harness && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build:protocol": "pnpm --filter @aurion/shared-protocol build",
+    "build:eye": "pnpm --filter desktop-eye build",
+    "build:web": "pnpm --filter web-main build",
+    "build": "pnpm --filter @aurion/shared-protocol build && pnpm --filter desktop-eye build && pnpm --filter web-main build",
+    "test:vps": "cd apps/vps-harness && uv run pytest"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

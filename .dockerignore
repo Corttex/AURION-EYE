@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+apps/vps-harness/.venv/
+apps/vps-harness/.pytest_cache/
+apps/vps-harness/__pycache__/
+**/__pycache__/
+**/dist/
+**/.next/
+**/target/
+*.db
+*.db-wal
+*.db-shm
+.aurion_master.key
+.env
+.git/
+MDs/
+*.log
