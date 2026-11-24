@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 import uuid
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +28,8 @@ async def _vault_secret_getter(key_name: str):
             )
         ).scalar_one_or_none()
         if not row:
-            return None
+            env_val = os.getenv(key_name, "").strip()
+            return env_val or None
         return vault.decrypt(row.encrypted_value)
 
 
