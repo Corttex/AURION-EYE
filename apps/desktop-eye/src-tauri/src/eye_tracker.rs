@@ -46,8 +46,8 @@ pub fn set_overlay_mode(app_handle: AppHandle, mode: String) -> Result<(), Strin
         .ok_or_else(|| "Janela eye-overlay não encontrada".to_string())?;
 
     let (w, h) = match mode.as_str() {
-        "radial" => (460.0, 480.0),
-        "popover" => (440.0, 540.0),
+        "radial" => (920.0, 640.0),
+        "popover" => (1040.0, 680.0),
         _ => (190.0, 150.0),
     };
     win.set_size(Size::Logical(LogicalSize { width: w, height: h }))

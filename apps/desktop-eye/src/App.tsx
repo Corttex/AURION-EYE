@@ -53,6 +53,14 @@ export default function App() {
   const [wakeWordContinuous, setWakeWordContinuous] = useState(false);
   const [wakeWord, setWakeWord] = useState<'Aurion' | 'Hórus'>('Aurion');
   const [connectionVersion, setConnectionVersion] = useState(0);
+  const [productionMax, setProductionMax] = useState(false);
+  const [pendingRpa, setPendingRpa] = useState<{
+    request_id: string;
+    action: string;
+    norm_x: number;
+    norm_y: number;
+    text?: string;
+  } | null>(null);
   const [permissions, setPermissions] = useState<LocalPermissions>({
     microphone: true,
     screen_capture: true,
@@ -71,6 +79,8 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const permissionsRef = useRef(permissions);
   permissionsRef.current = permissions;
+  const productionMaxRef = useRef(productionMax);
+  productionMaxRef.current = productionMax;
   const stopRecRef = useRef<(() => void) | null>(null);
   const wakeDetectorRef = useRef<WakeWordDetector | null>(null);
   const ttsRef = useRef(ttsEnabled);
@@ -148,8 +158,16 @@ export default function App() {
             const cap = await captureScreenIfTauri();
             ws.send(JSON.stringify({ type: 'DESKTOP_ACTION_RESULT', request_id: event.request_id, payload: cap }));
           } else if (event.type === 'EXECUTE_INPUT') {
-            if (!permissionsRef.current.local_rpa) {
-              ws.send(JSON.stringify({ type: 'DESKTOP_ACTION_RESULT', request_id: event.request_id, payload: { aborted: true } }));
+            if (!productionMaxRef.current) {
+              // Modo Supervisionado: sempre pergunta ao usuário antes de mexer no mouse/teclado
+              setPendingRpa({
+                request_id: event.request_id,
+                action: event.action,
+                norm_x: event.norm_x,
+                norm_y: event.norm_y,
+                text: event.text,
+              });
+              setMode('popover');
               return;
             }
             const ok = await executeRpaIfTauri({
@@ -279,6 +297,36 @@ export default function App() {
     return () => detector.stop();
   }, [wakeWordContinuous, wakeWord, permissions.microphone, handleSendChat, speakReply]);
 
+  const toggleProductionMax = useCallback(() => {
+    setProductionMax((prev) => {
+      const next = !prev;
+      setPermissions((p) => ({ ...p, local_rpa: next }));
+      setBanner(next ? 'PRODUÇÃO MAX ATIVO (Acesso Livre)' : 'Modo Supervisionado');
+      return next;
+    });
+  }, []);
+
+  const resolvePendingRpa = useCallback(async (approved: boolean) => {
+    if (!pendingRpa) return;
+    const req = pendingRpa;
+    setPendingRpa(null);
+    if (!approved) {
+      wsRef.current?.send(
+        JSON.stringify({ type: 'DESKTOP_ACTION_RESULT', request_id: req.request_id, payload: { aborted: true } })
+      );
+      return;
+    }
+    const ok = await executeRpaIfTauri({
+      action: req.action,
+      norm_x: req.norm_x,
+      norm_y: req.norm_y,
+      text: req.text,
+    });
+    wsRef.current?.send(
+      JSON.stringify({ type: 'DESKTOP_ACTION_RESULT', request_id: req.request_id, payload: { aborted: !ok } })
+    );
+  }, [pendingRpa]);
+
   if (mode === 'sphere') {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-transparent">
@@ -300,12 +348,14 @@ export default function App() {
 
   if (mode === 'radial') {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-transparent">
+      <div className="w-screen h-screen flex items-center justify-center bg-transparent p-3">
         <RadialHub
           eyeState={eyeState}
           activeTunnelsCount={activeTunnelsCount}
           pendingEmailsCount={pendingEmailsCount}
           focusRemainingSec={focusRemainingSec}
+          productionMax={productionMax}
+          onToggleProductionMax={toggleProductionMax}
           onSelectModule={(id) => {
             setActiveModule(id);
             setMode('popover');
@@ -320,45 +370,117 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen flex items-center justify-center bg-transparent p-2">
-      <div className="w-[424px] h-[520px] rounded-2xl bg-obsidian-950/95 border border-obsidian-border shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden">
-        {/* Top Compact Bar: Mini Eye + 9 Tabs + REDE MAIN */}
-        <div className="px-3 py-2 bg-[#0E041A] border-b border-[#9333EA]/30 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('radial')}
-            className="text-xs font-bold tracking-widest text-[#F0ABFC] hover:text-white flex items-center gap-1.5"
-          >
-            <span className="w-2.5 h-2.5 rounded-full bg-[#D946EF] shadow-[0_0_8px_#E879F9] inline-block" />
-            AURION
-          </button>
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {RADIAL_NODES.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                title={label}
-                onClick={() => setActiveModule(id)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  activeModule === id
-                    ? 'bg-[#C026D3] text-white shadow-[0_0_10px_rgba(217,70,239,0.6)]'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-[#1B0930]'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </button>
-            ))}
+      <div className="w-full max-w-[1040px] h-[660px] rounded-2xl bg-black border border-[#9333EA]/40 shadow-[0_0_90px_rgba(168,85,247,0.22)] flex flex-col overflow-hidden">
+        {/* Top Command Bar */}
+        <div className="px-4 py-2.5 bg-black border-b border-white/10 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold tracking-[0.24em] text-[#F5D0FE]">AURION CO.</span>
+            <span className="text-[10px] font-mono text-zinc-500">
+              {RADIAL_NODES.find((n) => n.id === activeModule)?.label || 'COMANDO'}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={() => openRedeMainUrl(getWebMainUrl())}
-            className="px-2 py-1 rounded-md bg-[#1B0930] border border-[#E879F9]/60 text-[10px] font-bold text-[#F5D0FE] whitespace-nowrap hover:bg-[#2B0E4D]"
-          >
-            ◈ MAIN
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleProductionMax}
+              className={`px-3 py-1 rounded-full border text-[10px] font-bold tracking-wider transition-all ${
+                productionMax
+                  ? 'bg-[#D946EF]/25 border-[#F0ABFC] text-[#FAE8FF] shadow-[0_0_16px_rgba(232,121,249,0.55)]'
+                  : 'bg-zinc-950 border-white/15 text-zinc-400 hover:border-[#C026D3]/60'
+              }`}
+            >
+              {productionMax ? '⚡ PRODUÇÃO MAX: LIVRE ACESSO' : '🛡️ SUPERVISIONADO (PERGUNTAR)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => openRedeMainUrl(getWebMainUrl())}
+              className="px-3 py-1 rounded-full bg-zinc-950 border border-[#C026D3]/65 text-[10px] font-bold tracking-wider text-[#F5D0FE] hover:bg-[#1E0536]"
+            >
+              ◈ REDE MAIN
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('sphere')}
+              className="px-2.5 py-1 rounded-full bg-zinc-950 border border-white/15 text-[10px] text-zinc-400 hover:text-white"
+            >
+              Minimizar
+            </button>
+          </div>
         </div>
 
-        {/* Active Popover Body */}
-        <div className="flex-1 p-3 overflow-hidden">
+        {/* Supervised Machine Action Prompt (Human-in-the-Loop) */}
+        {pendingRpa && (
+          <div className="mx-4 mt-3 px-4 py-2.5 rounded-xl bg-[#1A052E] border border-[#F0ABFC]/70 flex items-center justify-between gap-3 shadow-[0_0_24px_rgba(217,70,239,0.35)]">
+            <div className="text-xs text-[#FAE8FF]">
+              <span className="font-bold text-[#F0ABFC]">CONFIRMAÇÃO DE MÁQUINA:</span> AURION solicita{' '}
+              <code className="px-1.5 py-0.5 rounded bg-black text-white">{pendingRpa.action}</code>{' '}
+              em ({pendingRpa.norm_x.toFixed(2)}, {pendingRpa.norm_y.toFixed(2)})
+              {pendingRpa.text ? ` • "${pendingRpa.text}"` : ''}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => resolvePendingRpa(true)}
+                className="px-3 py-1 rounded-lg bg-[#C026D3] hover:bg-[#D946EF] text-white text-[11px] font-bold"
+              >
+                Permitir Agora
+              </button>
+              <button
+                type="button"
+                onClick={() => resolvePendingRpa(false)}
+                className="px-3 py-1 rounded-lg bg-zinc-900 border border-white/15 text-zinc-300 text-[11px]"
+              >
+                Bloquear
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 100% Black Split Body: Left Corner Galaxy + Function Rail | Right Active Workspace */}
+        <div className="flex-1 flex overflow-hidden bg-black">
+          {/* Left Corner Dock with Main Galaxy Button + Key Functions */}
+          <div className="w-[228px] border-r border-white/10 bg-black p-3 flex flex-col justify-between shrink-0">
+            <div className="flex flex-col items-center pb-3 border-b border-white/10">
+              <HorusEyeSphere
+                eyeState={eyeState}
+                activeTunnelsCount={activeTunnelsCount}
+                focusRemainingSec={focusRemainingSec}
+                audioLevel={audioLevel}
+                compact
+                onClick={() => setMode('radial')}
+                onFileDrop={handleFileDrop}
+              />
+              <span className="text-[9px] font-mono text-zinc-500 tracking-widest uppercase mt-0.5">
+                Voltar à Órbita
+              </span>
+            </div>
+
+            <div className="flex-1 py-2 space-y-1 overflow-y-auto">
+              {RADIAL_NODES.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveModule(id)}
+                  className={`w-full px-2.5 py-2 rounded-lg flex items-center gap-2.5 text-left text-[11px] font-semibold tracking-wider transition-all ${
+                    activeModule === id
+                      ? 'bg-[#2E074F] border border-[#E879F9]/60 text-white shadow-[0_0_14px_rgba(217,70,239,0.28)]'
+                      : 'text-zinc-400 border border-transparent hover:text-zinc-100 hover:bg-zinc-950'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 text-[9px] font-mono text-zinc-500 text-center">
+              ESC 2x = Pânico RPA
+            </div>
+          </div>
+
+          {/* Main 100% Black Content Workspace */}
+          <div className="flex-1 p-4 overflow-hidden bg-black">
           {activeModule === 'chat' && (
             <ChatPanel
               messages={messages}
@@ -399,6 +521,7 @@ export default function App() {
               onReconnectTunnel={() => setConnectionVersion((v) => v + 1)}
             />
           )}
+          </div>
         </div>
       </div>
     </div>

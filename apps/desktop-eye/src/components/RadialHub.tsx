@@ -9,6 +9,8 @@ import {
   MessageSquare,
   RefreshCw,
   Settings,
+  ShieldAlert,
+  Zap,
 } from 'lucide-react';
 import type { EyeModuleId, EyeState } from '@aurion/shared-protocol';
 import { HorusEyeSphere } from './HorusEyeSphere';
@@ -16,28 +18,29 @@ import { HorusEyeSphere } from './HorusEyeSphere';
 export interface RadialNodeMeta {
   id: EyeModuleId;
   label: string;
+  subtitle: string;
   Icon: React.ComponentType<{ className?: string }>;
 }
 
 export const RADIAL_NODES: RadialNodeMeta[] = [
-  { id: 'chat', label: 'COMANDO IA', Icon: MessageSquare },
-  { id: 'tasks', label: 'TAREFAS', Icon: CheckSquare },
-  { id: 'tunnels', label: 'EM TÚNEL', Icon: Activity },
-  { id: 'habits', label: 'HÁBITOS', Icon: Flame },
-  { id: 'notes', label: 'MEMÓRIA', Icon: FileText },
-  { id: 'converter', label: 'CONVERSOR', Icon: RefreshCw },
-  { id: 'connectors', label: 'COFRE API', Icon: KeyRound },
-  { id: 'emails', label: 'COMUNICAÇÃO', Icon: Mail },
-  { id: 'settings', label: 'SISTEMA', Icon: Settings },
+  { id: 'chat', label: 'COMANDO IA', subtitle: 'Voz, prompt & Hermes 3', Icon: MessageSquare },
+  { id: 'tasks', label: 'DEMANDAS', subtitle: 'Kanban & missões ativas', Icon: CheckSquare },
+  { id: 'tunnels', label: 'EXECUÇÕES', subtitle: 'Túneis VPS & RPA ao vivo', Icon: Activity },
+  { id: 'notes', label: 'MEMÓRIA', subtitle: 'Obsidian & notas lineares', Icon: FileText },
+  { id: 'connectors', label: 'COFRE API', subtitle: '50 LLMs & chaves AES-256', Icon: KeyRound },
+  { id: 'emails', label: 'COMUNICAÇÃO', subtitle: 'WhatsApp & E-mails HITL', Icon: Mail },
+  { id: 'converter', label: 'CONVERSOR', subtitle: 'Arquivos & mídia em lote', Icon: RefreshCw },
+  { id: 'habits', label: 'HÁBITOS', subtitle: 'Foco 25m & streaks diários', Icon: Flame },
+  { id: 'settings', label: 'SISTEMA', subtitle: 'Permissões & conexão', Icon: Settings },
 ];
-
-const DEGREE_TICKS = Array.from({ length: 36 }, (_, i) => i * 10);
 
 interface RadialHubProps {
   eyeState: EyeState;
   activeTunnelsCount: number;
   pendingEmailsCount: number;
   focusRemainingSec: number | null;
+  productionMax: boolean;
+  onToggleProductionMax: () => void;
   onSelectModule: (id: EyeModuleId) => void;
   onCollapse: () => void;
   onOpenRedeMain: () => void;
@@ -49,169 +52,138 @@ export const RadialHub: React.FC<RadialHubProps> = ({
   activeTunnelsCount,
   pendingEmailsCount,
   focusRemainingSec,
+  productionMax,
+  onToggleProductionMax,
   onSelectModule,
   onCollapse,
   onOpenRedeMain,
   onFileDrop,
 }) => {
   const [hoveredNode, setHoveredNode] = useState<EyeModuleId | null>(null);
-  const radius = 144;
-  const center = 210;
+
+  // Sagittarius-inspired wide orbital arc on the right + central-left black hole
+  const centerX = 290;
+  const centerY = 260;
+  const arcRadius = 210;
 
   return (
-    <div className="relative w-[440px] h-[468px] flex flex-col items-center justify-between py-2 select-none">
-      {/* Constellation HUD Canvas (Print 2 Astrolabe + Neural Lines) */}
-      <div className="relative w-[420px] h-[406px] flex items-center justify-center">
-        <svg
-          viewBox="0 0 420 420"
-          className="absolute inset-0 w-full h-full pointer-events-none"
-        >
+    <div className="relative w-full max-w-[920px] h-[610px] rounded-2xl bg-black border border-[#9333EA]/35 shadow-[0_0_80px_rgba(168,85,247,0.22)] flex flex-col overflow-hidden select-none">
+      {/* Top Minimal Cosmic Bar */}
+      <div className="relative z-20 px-5 py-3 border-b border-white/10 bg-black flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold tracking-[0.28em] text-[#F5D0FE]">AURION CO.</span>
+          <span className="text-[10px] font-mono text-zinc-500">SINGULARITY HUD</span>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          {/* Modo Produção MAX Toggle */}
+          <button
+            type="button"
+            onClick={onToggleProductionMax}
+            className={`px-3 py-1 rounded-full border text-[10px] font-bold tracking-wider flex items-center gap-1.5 transition-all ${
+              productionMax
+                ? 'bg-[#D946EF]/20 border-[#F0ABFC] text-[#FAE8FF] shadow-[0_0_16px_rgba(232,121,249,0.55)]'
+                : 'bg-zinc-950 border-white/15 text-zinc-400 hover:border-[#C026D3]/60 hover:text-zinc-200'
+            }`}
+            title="Alternar entre Modo Supervisionado (pergunta antes de agir) e Produção MAX (livre acesso)"
+          >
+            {productionMax ? <Zap className="w-3 h-3 text-[#F0ABFC]" /> : <ShieldAlert className="w-3 h-3 text-amber-400" />}
+            {productionMax ? 'PRODUÇÃO MAX: ATIVO' : 'SUPERVISIONADO (PERGUNTAR)'}
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenRedeMain}
+            className="px-3 py-1 rounded-full bg-zinc-950 border border-[#C026D3]/60 text-[10px] font-bold tracking-[0.18em] text-[#F5D0FE] hover:bg-[#1E0536] transition-all"
+          >
+            ◈ REDE MAIN
+          </button>
+
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="px-2.5 py-1 rounded-full bg-zinc-950 border border-white/15 text-[10px] text-zinc-400 hover:text-white"
+            title="Minimizar para Galáxia flutuante"
+          >
+            Minimizar
+          </button>
+        </div>
+      </div>
+
+      {/* 100% Black Sagittarius Orbital Field */}
+      <div className="relative flex-1 bg-black overflow-hidden">
+        <svg viewBox="0 0 880 540" className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
-            <radialGradient id="hudBackdrop" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#1E0536" stopOpacity="0.72" />
-              <stop offset="65%" stopColor="#090212" stopOpacity="0.58" />
-              <stop offset="100%" stopColor="#04010A" stopOpacity="0" />
+            <radialGradient id="sagGlow" cx="33%" cy="48%" r="48%">
+              <stop offset="0%" stopColor="#3B0764" stopOpacity="0.32" />
+              <stop offset="55%" stopColor="#120322" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0" />
             </radialGradient>
-            <linearGradient id="beamDown" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#F5D0FE" stopOpacity="0.85" />
-              <stop offset="60%" stopColor="#C026D3" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#581C87" stopOpacity="0" />
-            </linearGradient>
           </defs>
 
-          {/* Soft dark cosmic aura behind the HUD */}
-          <circle cx={center} cy={center} r="196" fill="url(#hudBackdrop)" />
+          <rect x="0" y="0" width="880" height="540" fill="url(#sagGlow)" />
 
-          {/* Concentric Astrolabe HUD Rings (Print 2 signature) */}
-          <circle
-            cx={center}
-            cy={center}
-            r="182"
-            fill="none"
-            stroke="#A855F7"
-            strokeOpacity="0.18"
-            strokeWidth="0.8"
-          />
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="#D946EF"
-            strokeOpacity="0.32"
-            strokeWidth="1"
-            strokeDasharray="3 5"
-          />
-          <circle
-            cx={center}
-            cy={center}
-            r="96"
-            fill="none"
-            stroke="#E879F9"
-            strokeOpacity="0.22"
-            strokeWidth="0.9"
-          />
-          <circle
-            cx={center}
-            cy={center}
-            r="68"
-            fill="none"
-            stroke="#F5D0FE"
-            strokeOpacity="0.16"
-            strokeWidth="0.75"
-            strokeDasharray="12 6"
-          />
+          {/* Concentric Fine Orbital Rings */}
+          <circle cx={centerX} cy={centerY} r="135" fill="none" stroke="#A855F7" strokeOpacity="0.14" strokeWidth="0.9" />
+          <circle cx={centerX} cy={centerY} r={arcRadius} fill="none" stroke="#D946EF" strokeOpacity="0.26" strokeWidth="1" strokeDasharray="3 6" />
+          <circle cx={centerX} cy={centerY} r="285" fill="none" stroke="#9333EA" strokeOpacity="0.12" strokeWidth="0.8" />
 
-          {/* Perimeter Degree Ticks */}
-          {DEGREE_TICKS.map((deg) => {
-            const rad = (deg * Math.PI) / 180;
-            const inner = deg % 30 === 0 ? 175 : 178.5;
-            const outer = 182;
-            return (
-              <line
-                key={deg}
-                x1={center + Math.cos(rad) * inner}
-                y1={center + Math.sin(rad) * inner}
-                x2={center + Math.cos(rad) * outer}
-                y2={center + Math.sin(rad) * outer}
-                stroke="#E879F9"
-                strokeOpacity={deg % 30 === 0 ? 0.45 : 0.2}
-                strokeWidth={deg % 30 === 0 ? 1.1 : 0.6}
-              />
-            );
-          })}
-
-          {/* Vertical Energy Pillar descending to REDE MAIN (Print 2 bottom beam) */}
-          <line
-            x1={center}
-            y1={center + 38}
-            x2={center}
-            y2="412"
-            stroke="url(#beamDown)"
-            strokeWidth="2.2"
-          />
-          <ellipse
-            cx={center}
-            cy="406"
-            rx="46"
-            ry="7"
-            fill="none"
-            stroke="#D946EF"
-            strokeOpacity="0.45"
-            strokeWidth="1"
-          />
-
-          {/* Radiating Constellation Lines from Black Hole to each Node */}
-          {RADIAL_NODES.map((node, index) => {
-            const angleRad = ((index * (360 / RADIAL_NODES.length) - 90) * Math.PI) / 180;
-            const x1 = center + Math.cos(angleRad) * 56;
-            const y1 = center + Math.sin(angleRad) * 56;
-            const x2 = center + Math.cos(angleRad) * (radius - 26);
-            const y2 = center + Math.sin(angleRad) * (radius - 26);
+          {/* Glowing Orbital Arc Connectors from Singularity to each Key Function */}
+          {RADIAL_NODES.map((node, idx) => {
+            const t = idx / (RADIAL_NODES.length - 1);
+            const angleDeg = -64 + t * 128; // Sweeping right-hand orbital arc (-64° to +64°)
+            const rad = (angleDeg * Math.PI) / 180;
+            const nx = centerX + Math.cos(rad) * arcRadius;
+            const ny = centerY + Math.sin(rad) * arcRadius;
             const isHovered = hoveredNode === node.id;
 
+            const ctrlX = centerX + Math.cos(rad) * 110;
+            const ctrlY = centerY + Math.sin(rad) * 55;
+
             return (
-              <g key={`ray-${node.id}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
+              <g key={`arc-${node.id}`}>
+                <path
+                  d={`M ${centerX + 42} ${centerY} Q ${ctrlX} ${ctrlY} ${nx} ${ny}`}
+                  fill="none"
                   stroke={isHovered ? '#FAE8FF' : '#C026D3'}
-                  strokeOpacity={isHovered ? 0.9 : 0.32}
-                  strokeWidth={isHovered ? 1.6 : 0.9}
+                  strokeOpacity={isHovered ? 0.92 : 0.25}
+                  strokeWidth={isHovered ? 1.8 : 0.9}
                 />
                 <circle
-                  cx={x2}
-                  cy={y2}
-                  r={isHovered ? 2.4 : 1.5}
+                  cx={nx}
+                  cy={ny}
+                  r={isHovered ? 3.5 : 2}
                   fill={isHovered ? '#FFFFFF' : '#E879F9'}
-                  opacity={isHovered ? 1 : 0.6}
                 />
               </g>
             );
           })}
         </svg>
 
-        {/* Central Compact Gargantua Black Hole + AURION A */}
-        <div className="z-10">
+        {/* Left-Center Main Black Hole Button */}
+        <div
+          style={{ left: `${centerX}px`, top: `${centerY}px`, transform: 'translate(-50%, -50%)' }}
+          className="absolute z-10 flex flex-col items-center"
+        >
           <HorusEyeSphere
             eyeState={eyeState}
             activeTunnelsCount={activeTunnelsCount}
             focusRemainingSec={focusRemainingSec}
-            compact
             onClick={onCollapse}
             onFileDrop={onFileDrop}
           />
+          <span className="mt-1 text-[9px] font-mono tracking-[0.22em] text-zinc-500 uppercase">
+            Clique na função à direita
+          </span>
         </div>
 
-        {/* 9 Constellation HUD Medallion Buttons (Print 2 style) */}
-        {RADIAL_NODES.map((node, index) => {
-          const angleDeg = index * (360 / RADIAL_NODES.length) - 90;
-          const angleRad = (angleDeg * Math.PI) / 180;
-          const x = Math.cos(angleRad) * radius;
-          const y = Math.sin(angleRad) * radius;
-          const isTopHalf = Math.sin(angleRad) < -0.35;
+        {/* 9 Key Function Nodes along the Orbital Arc */}
+        {RADIAL_NODES.map((node, idx) => {
+          const t = idx / (RADIAL_NODES.length - 1);
+          const angleDeg = -64 + t * 128;
+          const rad = (angleDeg * Math.PI) / 180;
+          const nx = centerX + Math.cos(rad) * arcRadius;
+          const ny = centerY + Math.sin(rad) * arcRadius;
 
           const badge =
             node.id === 'tunnels' && activeTunnelsCount > 0
@@ -228,78 +200,33 @@ export const RadialHub: React.FC<RadialHubProps> = ({
               onMouseLeave={() => setHoveredNode(null)}
               onClick={() => onSelectModule(node.id)}
               style={{
-                transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`,
+                left: `${nx.toFixed(1)}px`,
+                top: `${ny.toFixed(1)}px`,
+                transform: 'translate(-18px, -50%)',
               }}
-              className={`group absolute z-20 flex ${
-                isTopHalf ? 'flex-col-reverse' : 'flex-col'
-              } items-center gap-1 transition-transform duration-200 hover:scale-110 focus:outline-none`}
+              className="group absolute z-20 flex items-center gap-3 text-left focus:outline-none"
             >
-              {/* Double-Ring Target Medallion with Crosshair Ticks */}
-              <div className="relative w-12 h-12 flex items-center justify-center">
-                <svg
-                  viewBox="0 0 56 56"
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                >
-                  {/* Outer thin target ring */}
-                  <circle
-                    cx="28"
-                    cy="28"
-                    r="26"
-                    fill="#0B0315"
-                    fillOpacity="0.88"
-                    stroke="#C026D3"
-                    strokeOpacity="0.55"
-                    strokeWidth="1"
-                    className="group-hover:stroke-[#FAE8FF] group-hover:stroke-opacity-100 transition-all"
-                  />
-                  {/* Inner medallion ring */}
-                  <circle
-                    cx="28"
-                    cy="28"
-                    r="21"
-                    fill="none"
-                    stroke="#E879F9"
-                    strokeOpacity="0.35"
-                    strokeWidth="0.85"
-                    strokeDasharray="6 3"
-                    className="group-hover:stroke-[#FFFFFF] group-hover:stroke-opacity-90 transition-all"
-                  />
-                  {/* 4 Cardinal Crosshair Ticks (Print 2 detail) */}
-                  <line x1="28" y1="0" x2="28" y2="5" stroke="#F5D0FE" strokeOpacity="0.7" strokeWidth="1" />
-                  <line x1="28" y1="51" x2="28" y2="56" stroke="#F5D0FE" strokeOpacity="0.7" strokeWidth="1" />
-                  <line x1="0" y1="28" x2="5" y2="28" stroke="#F5D0FE" strokeOpacity="0.7" strokeWidth="1" />
-                  <line x1="51" y1="28" x2="56" y2="28" stroke="#F5D0FE" strokeOpacity="0.7" strokeWidth="1" />
-                </svg>
-
-                {/* Hover glow core */}
-                <span className="absolute inset-2 rounded-full bg-[#D946EF]/0 group-hover:bg-[#D946EF]/25 blur-sm transition-colors pointer-events-none" />
-
-                <node.Icon className="relative z-10 w-4 h-4 text-[#F3E8FF] group-hover:text-white drop-shadow-[0_0_6px_rgba(240,171,252,0.85)] transition-colors" />
-
+              <div className="relative w-9 h-9 rounded-full bg-black border border-[#C026D3]/60 group-hover:border-[#FAE8FF] group-hover:scale-110 group-hover:shadow-[0_0_16px_rgba(232,121,249,0.65)] flex items-center justify-center transition-all">
+                <node.Icon className="w-4 h-4 text-[#E9D5FF] group-hover:text-white" />
                 {badge !== null && (
-                  <span className="absolute -top-0.5 -right-0.5 z-20 min-w-[16px] h-4 px-1 rounded-full bg-[#E879F9] text-[#090112] text-[10px] font-bold flex items-center justify-center shadow-[0_0_10px_#E879F9]">
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#E879F9] text-black text-[9px] font-bold flex items-center justify-center">
                     {badge}
                   </span>
                 )}
               </div>
 
-              {/* Uppercase Strategic HUD Label */}
-              <span className="text-[9px] font-semibold tracking-[0.16em] uppercase text-[#E9D5FF] group-hover:text-white bg-[#090212]/85 border border-[#A855F7]/25 group-hover:border-[#F0ABFC]/60 px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm transition-colors">
-                {node.label}
-              </span>
+              <div className="px-2.5 py-1 rounded-lg bg-black/90 border border-white/10 group-hover:border-[#E879F9]/55 transition-all">
+                <div className="text-[11px] font-bold tracking-[0.14em] text-[#F5D0FE] group-hover:text-white whitespace-nowrap">
+                  {node.label}
+                </div>
+                <div className="text-[9px] text-zinc-500 group-hover:text-zinc-300 whitespace-nowrap">
+                  {node.subtitle}
+                </div>
+              </div>
             </button>
           );
         })}
       </div>
-
-      {/* Bottom Portal CTA anchored on the vertical energy beam */}
-      <button
-        type="button"
-        onClick={onOpenRedeMain}
-        className="relative z-20 px-6 py-1.5 rounded-full bg-[#120422]/95 border border-[#E879F9]/75 text-[#FAE8FF] text-[11px] font-bold tracking-[0.22em] uppercase hover:bg-[#240842] hover:border-white hover:shadow-[0_0_22px_rgba(232,121,249,0.65)] transition-all"
-      >
-        ◈ REDE MAIN
-      </button>
     </div>
   );
 };
