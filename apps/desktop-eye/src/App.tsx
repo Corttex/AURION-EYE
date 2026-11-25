@@ -322,13 +322,13 @@ export default function App() {
     <div className="w-screen h-screen flex items-center justify-center bg-transparent p-2">
       <div className="w-[424px] h-[520px] rounded-2xl bg-obsidian-950/95 border border-obsidian-border shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden">
         {/* Top Compact Bar: Mini Eye + 9 Tabs + REDE MAIN */}
-        <div className="px-3 py-2 bg-obsidian-900 border-b border-obsidian-border flex items-center justify-between gap-2">
+        <div className="px-3 py-2 bg-[#0E041A] border-b border-[#9333EA]/30 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => setMode('radial')}
-            className="text-xs font-bold tracking-widest text-aurion-gold hover:text-aurion-lime flex items-center gap-1.5"
+            className="text-xs font-bold tracking-widest text-[#F0ABFC] hover:text-white flex items-center gap-1.5"
           >
-            <span className="w-2.5 h-2.5 rounded-full bg-aurion-lime inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#D946EF] shadow-[0_0_8px_#E879F9] inline-block" />
             AURION
           </button>
           <div className="flex items-center gap-1 overflow-x-auto">
@@ -340,8 +340,8 @@ export default function App() {
                 onClick={() => setActiveModule(id)}
                 className={`p-1.5 rounded-lg transition-colors ${
                   activeModule === id
-                    ? 'bg-aurion-lime text-obsidian-950'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-obsidian-800'
+                    ? 'bg-[#C026D3] text-white shadow-[0_0_10px_rgba(217,70,239,0.6)]'
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-[#1B0930]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -351,7 +351,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => openRedeMainUrl(getWebMainUrl())}
-            className="px-2 py-1 rounded-md bg-obsidian-800 border border-aurion-gold/60 text-[10px] font-bold text-aurion-lime whitespace-nowrap"
+            className="px-2 py-1 rounded-md bg-[#1B0930] border border-[#E879F9]/60 text-[10px] font-bold text-[#F5D0FE] whitespace-nowrap hover:bg-[#2B0E4D]"
           >
             ◈ MAIN
           </button>
