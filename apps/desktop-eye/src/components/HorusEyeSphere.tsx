@@ -101,15 +101,15 @@ void main() {
   // Ray-march curved geodesics around the Schwarzschild Event Horizon
   vec3 pos = ro;
   vec3 dir = rd;
-  float bhRadius = 0.56;
-  float gm = 0.175 + u_hover * 0.018;
+  float bhRadius = 0.62;
+  float gm = 0.21 + u_hover * 0.02;
 
   vec3 accCol = vec3(0.0);
-  float accGlow = 0.0;
   bool swallowed = false;
   float minR = 100.0;
+  float frontTransmittance = 1.0;
 
-  for (int i = 0; i < 40; i++) {
+  for (int i = 0; i < 44; i++) {
     float r = length(pos);
     minR = min(minR, r);
 
@@ -118,83 +118,89 @@ void main() {
       break;
     }
 
-    //Adaptive step size
-    float dt = clamp(r * 0.11, 0.035, 0.24);
+    float dt = clamp(r * 0.105, 0.032, 0.22);
     vec3 nextPos = pos + dir * dt;
 
     // Gravitational deflection of light (spacetime bending!)
-    vec3 accel = -pos * (gm / (r * r * r + 0.004));
-    dir = normalize(dir + accel * dt * 2.15);
+    vec3 accel = -pos * (gm / (r * r * r + 0.003));
+    dir = normalize(dir + accel * dt * 2.25);
 
-    // Check equatorial accretion disk crossing / slab density
-    float slab = exp(-abs(pos.y) * 16.5);
+    // Equatorial accretion disk slab
+    float slab = exp(-abs(pos.y) * 20.0);
     float rDisk = length(pos.xz);
 
-    if (slab > 0.01 && rDisk > bhRadius * 1.18 && rDisk < 2.65) {
-      float radialNorm = (rDisk - bhRadius * 1.18) / (2.65 - bhRadius * 1.18);
-      float fade = smoothstep(0.0, 0.11, radialNorm) * pow(1.0 - radialNorm, 1.45);
+    if (slab > 0.01 && rDisk > bhRadius * 1.24 && rDisk < 2.85) {
+      float radialNorm = (rDisk - bhRadius * 1.24) / (2.85 - bhRadius * 1.24);
+      float fade = smoothstep(0.0, 0.12, radialNorm) * pow(1.0 - radialNorm, 1.75);
 
-      // Slow, majestic Keplerian differential rotation (inner faster, outer slow)
+      // Slow, majestic Keplerian differential rotation (organic spiral shear, no moire rings)
       float angle = atan(pos.z, pos.x);
-      float keplerSpeed = 0.34 / pow(rDisk, 1.25);
-      float swirlPhase = angle - u_time * keplerSpeed + 3.6 / (rDisk + 0.25);
+      float keplerSpeed = 0.28 / pow(rDisk, 1.2);
+      float swirlPhase = angle - u_time * keplerSpeed + 4.4 / (rDisk + 0.2);
 
-      vec2 polarUv = vec2(rDisk * 3.8, swirlPhase * 1.5);
-      float dust = fbm(polarUv + vec2(0.0, -u_time * 0.09));
-      float fineRings = 0.55 + 0.45 * sin(rDisk * 26.0 - dust * 4.5 - u_time * 0.45);
-      float filaments = pow(clamp(dust * 1.25, 0.0, 1.0), 1.5) * fineRings;
+      vec2 polarUv = vec2(rDisk * 2.4, swirlPhase * 1.35);
+      float dustA = fbm(polarUv + vec2(0.0, -u_time * 0.07));
+      float dustB = fbm(polarUv * 2.1 + vec2(3.1, -u_time * 0.12));
+      float filaments = smoothstep(0.22, 0.86, dustA * 0.68 + dustB * 0.42);
 
-      // Relativistic Doppler beaming (left side approaching = hotter/brighter lilac-white)
-      float doppler = clamp(1.0 - pos.x * 0.36, 0.48, 1.58);
+      // Relativistic Doppler beaming
+      float doppler = clamp(1.0 - pos.x * 0.34, 0.45, 1.55);
 
-      // Official AURION CO. Cosmic Purple -> Magenta -> Incandescent Lilac-White palette
-      vec3 deepViolet = mix(vec3(0.22, 0.03, 0.42), vec3(0.45, 0.02, 0.12), u_alert);
-      vec3 aurionMagenta = mix(vec3(0.76, 0.14, 0.84), vec3(0.95, 0.18, 0.36), u_alert);
+      // Deep Cosmic Purple -> Magenta -> Lilac-White plasma
+      vec3 deepViolet = mix(vec3(0.20, 0.02, 0.40), vec3(0.45, 0.02, 0.12), u_alert);
+      vec3 aurionMagenta = mix(vec3(0.74, 0.12, 0.85), vec3(0.95, 0.18, 0.36), u_alert);
       vec3 hotCore = mix(vec3(0.99, 0.88, 1.0), vec3(1.0, 0.82, 0.88), u_alert);
 
-      float heat = clamp(filaments * doppler * (1.15 - radialNorm * 0.65), 0.0, 1.35);
-      vec3 localCol = mix(deepViolet, aurionMagenta, smoothstep(0.08, 0.55, heat));
-      localCol = mix(localCol, hotCore, smoothstep(0.58, 1.18, heat));
+      float heat = clamp(filaments * doppler * (1.12 - radialNorm * 0.72), 0.0, 1.3);
+      vec3 localCol = mix(deepViolet, aurionMagenta, smoothstep(0.10, 0.56, heat));
+      localCol = mix(localCol, hotCore, smoothstep(0.62, 1.15, heat));
 
-      float density = slab * fade * (0.28 + filaments * 1.15) * dt * (3.1 + u_energy * 0.9);
-      accCol += localCol * density * doppler;
-      accGlow += density;
+      // Keep the front band razor-thin over the black core so the shadow stays deep & ominous
+      float isFront = step(0.0, pos.z);
+      float frontDim = mix(1.0, 0.42, isFront * smoothstep(1.15, 0.65, length(p2d) * 2.1));
+
+      float density = slab * fade * (0.18 + filaments * 1.15) * dt * (2.9 + u_energy * 0.85) * frontDim;
+      accCol += localCol * density * doppler * frontTransmittance;
+      frontTransmittance *= exp(-density * 0.35);
     }
 
     pos = nextPos;
     if (r > 5.4 && dot(pos, dir) > 0.0) break;
   }
 
-  // Razor-thin Relativistic Photon Ring / Einstein Ring hugging the Event Horizon
-  float photonDist = abs(minR - bhRadius * 1.045);
-  float photonRing = exp(-photonDist * 38.0) * (0.85 + 0.25 * u_hover + 0.3 * u_energy);
-  vec3 photonCol = mix(vec3(0.95, 0.72, 1.0), vec3(1.0, 0.45, 0.55), u_alert) * photonRing;
+  // Pure Pitch-Black Event Horizon Shadow Mask (zero purple haze inside the void!)
+  float shadowMask = swallowed ? 0.0 : 1.0;
 
-  // Warped distant micro-stars lensed by the black hole's gravity (Einstein arcs)
+  // Razor-thin Relativistic Photon Ring hugging ONLY the outside of the Event Horizon
+  float photonDist = max(0.0, minR - bhRadius * 1.015);
+  float photonRing = exp(-photonDist * 58.0) * shadowMask * (0.95 + 0.3 * u_hover + 0.35 * u_energy);
+  vec3 photonCol = mix(vec3(0.96, 0.76, 1.0), vec3(1.0, 0.45, 0.55), u_alert) * photonRing;
+
+  // Warped distant micro-stars lensed by the black hole's gravity
   vec3 starCol = vec3(0.0);
   if (!swallowed) {
-    vec2 skyUv = dir.xy / (abs(dir.z) + 0.6) * 14.0;
-    float s = pow(hash21(floor(skyUv)), 26.0);
-    float twinkle = 0.65 + 0.35 * sin(u_time * 1.4 + s * 40.0);
-    float lensMask = exp(-length(v_uv) * 2.3);
-    starCol = vec3(0.92, 0.78, 1.0) * s * twinkle * lensMask * 0.55;
+    vec2 skyUv = dir.xy / (abs(dir.z) + 0.6) * 15.0;
+    float s = pow(hash21(floor(skyUv)), 28.0);
+    float twinkle = 0.65 + 0.35 * sin(u_time * 1.2 + s * 40.0);
+    float lensMask = exp(-length(v_uv) * 2.2);
+    starCol = vec3(0.92, 0.80, 1.0) * s * twinkle * lensMask * 0.5;
   }
 
-  // Soft outer purple atmospheric nebula halo
+  // Soft outer purple nebula halo ONLY outside the black hole shadow
   float centerDist = length(vec2(p2d.x * 0.68, p2d.y * 1.25));
-  float outerHalo = exp(-centerDist * 3.1) * (0.22 + u_hover * 0.12 + u_energy * 0.12);
-  vec3 haloCol = mix(vec3(0.52, 0.08, 0.68), vec3(0.85, 0.12, 0.3), u_alert) * outerHalo;
+  float outerHalo = exp(-centerDist * 3.0) * smoothstep(0.24, 0.42, length(p2d)) * (0.24 + u_hover * 0.12 + u_energy * 0.12);
+  vec3 haloCol = mix(vec3(0.50, 0.06, 0.68), vec3(0.85, 0.12, 0.3), u_alert) * outerHalo * shadowMask;
 
   vec3 col = accCol + photonCol + starCol + haloCol;
 
-  // Cinematic ACES-like tone mapping so highlights glow silky white-lilac without harsh clipping
-  col = 1.0 - exp(-col * 1.35);
+  // Cinematic tone mapping
+  col = 1.0 - exp(-col * 1.32);
 
-  // Smooth window-edge vignette so ZERO rectangular boundary ever appears on transparent desktop
+  // Smooth window-edge vignette so ZERO rectangular boundary ever appears
   float edgeFade = smoothstep(1.0, 0.66, length(v_uv * vec2(0.96, 1.06)));
   float luminance = max(col.r, max(col.g, col.b));
-  float coreOpaque = swallowed ? 0.98 : 0.0;
-  float alpha = clamp(max(coreOpaque, smoothstep(0.015, 0.38, luminance) * 1.15), 0.0, 1.0) * edgeFade;
+  float coreOpaque = swallowed ? 1.0 : 0.0;
+  float alpha = clamp(max(coreOpaque, smoothstep(0.015, 0.36, luminance) * 1.15), 0.0, 1.0) * edgeFade;
 
   // Premultiplied alpha output for crisp WebGL compositing over Windows desktop
   fragColor = vec4(col * alpha, alpha);
