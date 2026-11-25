@@ -6,7 +6,7 @@ import type {
   WsServerEvent,
 } from '@aurion/shared-protocol';
 import { HorusEyeSphere } from './components/HorusEyeSphere';
-import { RADIAL_NODES, RadialHub } from './components/RadialHub';
+import { AurionCommandCockpit } from './components/AurionCommandCockpit';
 import {
   ChatMessage,
   ChatPanel,
@@ -329,7 +329,7 @@ export default function App() {
 
   if (mode === 'sphere') {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-transparent">
+      <div className="w-screen h-screen flex items-center justify-center bg-transparent aurion-backdrop-enter">
         <HorusEyeSphere
           eyeState={eyeState}
           activeTunnelsCount={activeTunnelsCount}
@@ -338,7 +338,7 @@ export default function App() {
           banner={banner}
           isDragOver={isDragOver}
           onDragStateChange={setIsDragOver}
-          onClick={() => setMode('radial')}
+          onClick={() => setMode('popover')}
           onPanicTrigger={handlePanic}
           onFileDrop={handleFileDrop}
         />
@@ -346,184 +346,63 @@ export default function App() {
     );
   }
 
-  if (mode === 'radial') {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-transparent p-3">
-        <RadialHub
-          eyeState={eyeState}
-          activeTunnelsCount={activeTunnelsCount}
-          pendingEmailsCount={pendingEmailsCount}
-          focusRemainingSec={focusRemainingSec}
-          productionMax={productionMax}
-          onToggleProductionMax={toggleProductionMax}
-          onSelectModule={(id) => {
-            setActiveModule(id);
-            setMode('popover');
-          }}
-          onCollapse={() => setMode('sphere')}
-          onOpenRedeMain={() => openRedeMainUrl(getWebMainUrl())}
-          onFileDrop={handleFileDrop}
+  const activePanelNode = (
+    <>
+      {activeModule === 'chat' && (
+        <ChatPanel
+          messages={messages}
+          pill={pill}
+          listening={listening}
+          onVoiceToggle={toggleVoiceCapture}
+          onSendMessage={handleSendChat}
         />
-      </div>
-    );
-  }
+      )}
+      {activeModule === 'tasks' && <TasksPanel />}
+      {activeModule === 'tunnels' && <TunnelsPanel />}
+      {activeModule === 'habits' && (
+        <HabitsPanel
+          focusRemainingSec={focusRemainingSec}
+          onStartFocus={() => {
+            setFocusRemainingSec(25 * 60);
+            setEyeState('FOCUS');
+          }}
+        />
+      )}
+      {activeModule === 'notes' && <MemoryMapPanel />}
+      {activeModule === 'converter' && <ConverterPanel initialFile={droppedFile} />}
+      {activeModule === 'connectors' && <ConnectorsPanel />}
+      {activeModule === 'emails' && <EmailsPanel />}
+      {activeModule === 'settings' && (
+        <SettingsPanel
+          permissions={permissions}
+          onChangePermissions={setPermissions}
+          wakeWord={wakeWord}
+          onChangeWakeWord={setWakeWord}
+          ttsEnabled={ttsEnabled}
+          onToggleTts={setTtsEnabled}
+          voiceName={voiceName}
+          onChangeVoiceName={setVoiceName}
+          wakeWordContinuous={wakeWordContinuous}
+          onToggleWakeWordContinuous={setWakeWordContinuous}
+          onTestVoice={() => speakReply('Sistema de voz Aurion ativo e sincronizado em português.')}
+          onReconnectTunnel={() => setConnectionVersion((v) => v + 1)}
+        />
+      )}
+    </>
+  );
 
   return (
-    <div className="w-screen h-screen flex items-center justify-center bg-transparent p-2">
-      <div className="w-full max-w-[1040px] h-[660px] rounded-2xl bg-black border border-[#9333EA]/40 shadow-[0_0_90px_rgba(168,85,247,0.22)] flex flex-col overflow-hidden">
-        {/* Top Command Bar */}
-        <div className="px-4 py-2.5 bg-black border-b border-white/10 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold tracking-[0.24em] text-[#F5D0FE]">AURION CO.</span>
-            <span className="text-[10px] font-mono text-zinc-500">
-              {RADIAL_NODES.find((n) => n.id === activeModule)?.label || 'COMANDO'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleProductionMax}
-              className={`px-3 py-1 rounded-full border text-[10px] font-bold tracking-wider transition-all ${
-                productionMax
-                  ? 'bg-[#D946EF]/25 border-[#F0ABFC] text-[#FAE8FF] shadow-[0_0_16px_rgba(232,121,249,0.55)]'
-                  : 'bg-zinc-950 border-white/15 text-zinc-400 hover:border-[#C026D3]/60'
-              }`}
-            >
-              {productionMax ? '⚡ PRODUÇÃO MAX: LIVRE ACESSO' : '🛡️ SUPERVISIONADO (PERGUNTAR)'}
-            </button>
-            <button
-              type="button"
-              onClick={() => openRedeMainUrl(getWebMainUrl())}
-              className="px-3 py-1 rounded-full bg-zinc-950 border border-[#C026D3]/65 text-[10px] font-bold tracking-wider text-[#F5D0FE] hover:bg-[#1E0536]"
-            >
-              ◈ REDE MAIN
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('sphere')}
-              className="px-2.5 py-1 rounded-full bg-zinc-950 border border-white/15 text-[10px] text-zinc-400 hover:text-white"
-            >
-              Minimizar
-            </button>
-          </div>
-        </div>
-
-        {/* Supervised Machine Action Prompt (Human-in-the-Loop) */}
-        {pendingRpa && (
-          <div className="mx-4 mt-3 px-4 py-2.5 rounded-xl bg-[#1A052E] border border-[#F0ABFC]/70 flex items-center justify-between gap-3 shadow-[0_0_24px_rgba(217,70,239,0.35)]">
-            <div className="text-xs text-[#FAE8FF]">
-              <span className="font-bold text-[#F0ABFC]">CONFIRMAÇÃO DE MÁQUINA:</span> AURION solicita{' '}
-              <code className="px-1.5 py-0.5 rounded bg-black text-white">{pendingRpa.action}</code>{' '}
-              em ({pendingRpa.norm_x.toFixed(2)}, {pendingRpa.norm_y.toFixed(2)})
-              {pendingRpa.text ? ` • "${pendingRpa.text}"` : ''}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => resolvePendingRpa(true)}
-                className="px-3 py-1 rounded-lg bg-[#C026D3] hover:bg-[#D946EF] text-white text-[11px] font-bold"
-              >
-                Permitir Agora
-              </button>
-              <button
-                type="button"
-                onClick={() => resolvePendingRpa(false)}
-                className="px-3 py-1 rounded-lg bg-zinc-900 border border-white/15 text-zinc-300 text-[11px]"
-              >
-                Bloquear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 100% Black Split Body: Left Corner Galaxy + Function Rail | Right Active Workspace */}
-        <div className="flex-1 flex overflow-hidden bg-black">
-          {/* Left Corner Dock with Main Galaxy Button + Key Functions */}
-          <div className="w-[228px] border-r border-white/10 bg-black p-3 flex flex-col justify-between shrink-0">
-            <div className="flex flex-col items-center pb-3 border-b border-white/10">
-              <HorusEyeSphere
-                eyeState={eyeState}
-                activeTunnelsCount={activeTunnelsCount}
-                focusRemainingSec={focusRemainingSec}
-                audioLevel={audioLevel}
-                compact
-                onClick={() => setMode('radial')}
-                onFileDrop={handleFileDrop}
-              />
-              <span className="text-[9px] font-mono text-zinc-500 tracking-widest uppercase mt-0.5">
-                Voltar à Órbita
-              </span>
-            </div>
-
-            <div className="flex-1 py-2 space-y-1 overflow-y-auto">
-              {RADIAL_NODES.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setActiveModule(id)}
-                  className={`w-full px-2.5 py-2 rounded-lg flex items-center gap-2.5 text-left text-[11px] font-semibold tracking-wider transition-all ${
-                    activeModule === id
-                      ? 'bg-[#2E074F] border border-[#E879F9]/60 text-white shadow-[0_0_14px_rgba(217,70,239,0.28)]'
-                      : 'text-zinc-400 border border-transparent hover:text-zinc-100 hover:bg-zinc-950'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="pt-2 border-t border-white/10 text-[9px] font-mono text-zinc-500 text-center">
-              ESC 2x = Pânico RPA
-            </div>
-          </div>
-
-          {/* Main 100% Black Content Workspace */}
-          <div className="flex-1 p-4 overflow-hidden bg-black">
-          {activeModule === 'chat' && (
-            <ChatPanel
-              messages={messages}
-              pill={pill}
-              listening={listening}
-              onVoiceToggle={toggleVoiceCapture}
-              onSendMessage={handleSendChat}
-            />
-          )}
-          {activeModule === 'tasks' && <TasksPanel />}
-          {activeModule === 'tunnels' && <TunnelsPanel />}
-          {activeModule === 'habits' && (
-            <HabitsPanel
-              focusRemainingSec={focusRemainingSec}
-              onStartFocus={() => {
-                setFocusRemainingSec(25 * 60);
-                setEyeState('FOCUS');
-              }}
-            />
-          )}
-          {activeModule === 'notes' && <MemoryMapPanel />}
-          {activeModule === 'converter' && <ConverterPanel initialFile={droppedFile} />}
-          {activeModule === 'connectors' && <ConnectorsPanel />}
-          {activeModule === 'emails' && <EmailsPanel />}
-          {activeModule === 'settings' && (
-            <SettingsPanel
-              permissions={permissions}
-              onChangePermissions={setPermissions}
-              wakeWord={wakeWord}
-              onChangeWakeWord={setWakeWord}
-              ttsEnabled={ttsEnabled}
-              onToggleTts={setTtsEnabled}
-              voiceName={voiceName}
-              onChangeVoiceName={setVoiceName}
-              wakeWordContinuous={wakeWordContinuous}
-              onToggleWakeWordContinuous={setWakeWordContinuous}
-              onTestVoice={() => speakReply('Sistema de voz Aurion ativo e sincronizado em português.')}
-              onReconnectTunnel={() => setConnectionVersion((v) => v + 1)}
-            />
-          )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <AurionCommandCockpit
+      eyeState={eyeState}
+      activeModule={activeModule}
+      productionMax={productionMax}
+      pendingRpa={pendingRpa}
+      onSelectModule={setActiveModule}
+      onToggleProductionMax={toggleProductionMax}
+      onResolveRpa={resolvePendingRpa}
+      onOpenRedeMain={() => openRedeMainUrl(getWebMainUrl())}
+      onCollapse={() => setMode('sphere')}
+      rightPanelContent={activePanelNode}
+    />
   );
 }

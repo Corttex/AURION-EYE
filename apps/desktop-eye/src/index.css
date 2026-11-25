@@ -6,7 +6,82 @@
   color-scheme: dark;
 }
 
-/* Custom ultra-thin scrollbar for compact GlassLiquid popovers */
+@keyframes aurionBackdropIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes aurionRevealSlow {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.975);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes aurionGalaxyExpand {
+  0% {
+    opacity: 0;
+    transform: scale(0.84);
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes aurionPanelSwitch {
+  0% {
+    opacity: 0;
+    transform: translateX(10px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0px);
+  }
+}
+
+.aurion-backdrop-enter {
+  animation: aurionBackdropIn 720ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.aurion-galaxy-enter {
+  animation: aurionGalaxyExpand 920ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.aurion-stagger-1 {
+  opacity: 0;
+  animation: aurionRevealSlow 780ms cubic-bezier(0.16, 1, 0.3, 1) 140ms forwards;
+}
+
+.aurion-stagger-2 {
+  opacity: 0;
+  animation: aurionRevealSlow 780ms cubic-bezier(0.16, 1, 0.3, 1) 260ms forwards;
+}
+
+.aurion-stagger-3 {
+  opacity: 0;
+  animation: aurionRevealSlow 780ms cubic-bezier(0.16, 1, 0.3, 1) 380ms forwards;
+}
+
+.aurion-panel-switch {
+  animation: aurionPanelSwitch 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom ultra-thin scrollbar in AURION Cosmic Purple */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -15,9 +90,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e2230;
+  background: #2c1654;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #d4af37;
+  background: #c026d3;
 }
