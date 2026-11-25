@@ -15,11 +15,11 @@ import {
   EmailsPanel,
   HabitsPanel,
   LocalPermissions,
-  NotesPanel,
   SettingsPanel,
   TasksPanel,
   TunnelsPanel,
 } from './components/panels/ModulePanels';
+import { MemoryMapPanel } from './components/panels/MemoryMapPanel';
 import { apiFetch, getWebMainUrl, getWsUrl } from './lib/apiClient';
 import {
   captureScreenIfTauri,
@@ -501,7 +501,7 @@ export default function App() {
               }}
             />
           )}
-          {activeModule === 'notes' && <NotesPanel />}
+          {activeModule === 'notes' && <MemoryMapPanel />}
           {activeModule === 'converter' && <ConverterPanel initialFile={droppedFile} />}
           {activeModule === 'connectors' && <ConnectorsPanel />}
           {activeModule === 'emails' && <EmailsPanel />}
