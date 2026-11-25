@@ -400,6 +400,7 @@ export default function App() {
       onSelectModule={setActiveModule}
       onToggleProductionMax={toggleProductionMax}
       onResolveRpa={resolvePendingRpa}
+      onQuickPrompt={handleSendChat}
       onOpenRedeMain={() => openRedeMainUrl(getWebMainUrl())}
       onCollapse={() => setMode('sphere')}
       rightPanelContent={activePanelNode}

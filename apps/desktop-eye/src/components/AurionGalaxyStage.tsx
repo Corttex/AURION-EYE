@@ -25,9 +25,7 @@ interface OrbitParticle {
   size: number;
   alpha: number;
   hueMix: number;
-  lenteAngle: number;
   lenteRadius: number;
-  memoryIndex: number; // >= 0 if bound to a real memory node
 }
 
 function seededRand(seed: number): number {
@@ -47,8 +45,7 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
   const [selectedMemory, setSelectedMemory] = useState<GalaxyMemoryItem | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const morphRef = useRef(0); // 0 = DISCO, 1 = LENTE (smoothly lerped)
+  const morphRef = useRef(0);
   const targetMorphRef = useRef(0);
   targetMorphRef.current = viewMode === 'lente' ? 1 : 0;
 
@@ -61,37 +58,31 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
   const pointerRef = useRef({ x: 0, y: 0, active: false, boost: 0 });
   const memoryScreenCoordsRef = useRef<Array<{ x: number; y: number; mem: GalaxyMemoryItem }>>([]);
 
-  // Pre-generate 920 cosmic particles matching the dense concentric elliptical orbital galaxy in the reference
   const particles = useMemo<OrbitParticle[]>(() => {
     const list: OrbitParticle[] = [];
-    const total = 920;
-    for (let i = 0; i < total; i++) {
+    for (let i = 0; i < 820; i++) {
       const r1 = seededRand(i * 3 + 1);
       const r2 = seededRand(i * 3 + 2);
       const r3 = seededRand(i * 3 + 3);
       const r4 = seededRand(i * 3 + 4);
 
-      // Quantize softly into concentric gravitational orbital streams
       const ringIndex = Math.pow(r1, 1.35);
-      const baseRing = 56 + ringIndex * 188;
-      const keplerSpeed = (0.045 + (1 - ringIndex) * 0.14) * (0.8 + r2 * 0.4);
+      const baseRing = 44 + ringIndex * 145;
+      const keplerSpeed = (0.04 + (1 - ringIndex) * 0.12) * (0.8 + r2 * 0.4);
 
       list.push({
         ring: baseRing,
         baseAngle: r2 * Math.PI * 2,
         speed: keplerSpeed,
-        size: r3 > 0.94 ? 2.2 : 0.7 + r3 * 1.15,
-        alpha: 0.22 + (1 - ringIndex) * 0.58 + r4 * 0.18,
+        size: r3 > 0.94 ? 2.1 : 0.65 + r3 * 1.1,
+        alpha: 0.24 + (1 - ringIndex) * 0.58 + r4 * 0.16,
         hueMix: r4,
-        lenteAngle: r2 * Math.PI * 2,
-        lenteRadius: 72 + Math.pow(r1, 0.82) * 235,
-        memoryIndex: -1,
+        lenteRadius: 56 + Math.pow(r1, 0.85) * 180,
       });
     }
     return list;
   }, []);
 
-  // Bind real memories to prominent glowing star-nodes inside the orbit
   const memoryNodes = useMemo(() => {
     const safeMems =
       memories.length > 0
@@ -113,25 +104,23 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
 
     return safeMems.map((mem, idx) => {
       const angle = (idx / Math.max(1, safeMems.length)) * Math.PI * 2 + 0.45;
-      const ring = 86 + ((idx * 37) % 120);
-      return { mem, angle, ring, speed: 0.032 + (idx % 4) * 0.01 };
+      const ring = 66 + ((idx * 31) % 92);
+      return { mem, angle, ring, speed: 0.028 + (idx % 4) * 0.008 };
     });
   }, [memories]);
 
   const memoryNodesRef = useRef(memoryNodes);
   memoryNodesRef.current = memoryNodes;
 
-  // Compute right-hand curved orbital arc geometry (matching Sagittarius skill arc)
   const arcItems = useMemo(() => {
     return RADIAL_NODES.map((node, idx) => {
       const t = idx / (RADIAL_NODES.length - 1);
-      const deg = -56 + t * 112;
+      const deg = -60 + t * 120;
       const rad = (deg * Math.PI) / 180;
       return { node, idx, deg, rad };
     });
   }, []);
 
-  // 60FPS Canvas Animation Loop (slow, majestic, zero-jank morphing)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -161,50 +150,46 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      // Slow, silky morph between DISCO (0) and LENTE (1)
       morphRef.current += (targetMorphRef.current - morphRef.current) * 0.045;
       const morph = morphRef.current;
 
-      // Smooth pointer hover velocity boost
       const targetBoost = pointerRef.current.active ? 1 : 0;
       pointerRef.current.boost += (targetBoost - pointerRef.current.boost) * 0.045;
 
       const stateRate =
         eyeStateRef.current === 'THINKING'
-          ? 2.0
+          ? 1.9
           : eyeStateRef.current === 'SPEAKING'
-          ? 1.4
-          : 0.72;
+          ? 1.35
+          : 0.65;
 
-      simTime += dt * stateRate * (1 + pointerRef.current.boost * 1.1);
+      simTime += dt * stateRate * (1 + pointerRef.current.boost * 1.0);
 
-      // Center of the Purple Black Hole (shifted slightly left so the right orbital arc breathes)
-      const cx = w * 0.42;
-      const cy = h * 0.52;
+      // Center of the Purple Black Hole on the left-center of the stage
+      const cx = w * 0.32;
+      const cy = h * 0.53;
 
-      // Elliptical perspective: tall vertical-tilted disk in DISCO mode (like Sagittarius screenshots!),
-      // expanding smoothly into a wide circular constellation in LENTE mode!
-      const scaleX = 0.54 + morph * 0.54; // 0.54 (elliptical disk) -> 1.08 (wide lens)
-      const scaleY = 1.08 + morph * 0.04;
+      const scaleX = 0.54 + morph * 0.48;
+      const scaleY = 1.04 + morph * 0.04;
       const tiltRad = -0.14 * (1 - morph);
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      // 1. Deep Cosmic Purple Ambient Nebula Glow behind the Black Hole
-      const bgGlow = ctx.createRadialGradient(cx, cy, 26, cx, cy, Math.max(w, h) * 0.46);
-      bgGlow.addColorStop(0, 'rgba(192, 38, 211, 0.24)');
-      bgGlow.addColorStop(0.28, 'rgba(126, 34, 206, 0.12)');
-      bgGlow.addColorStop(0.62, 'rgba(59, 7, 100, 0.04)');
+      // Deep cosmic purple glow
+      const bgGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, Math.max(w, h) * 0.45);
+      bgGlow.addColorStop(0, 'rgba(192, 38, 211, 0.26)');
+      bgGlow.addColorStop(0.32, 'rgba(126, 34, 206, 0.12)');
+      bgGlow.addColorStop(0.68, 'rgba(59, 7, 100, 0.04)');
       bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = bgGlow;
       ctx.fillRect(0, 0, w, h);
 
-      // 2. Subtle Concentric Gravitational Orbit Tracks (like the screenshots)
+      // Concentric faint orbit rings
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(tiltRad);
-      for (let r = 64; r <= 232; r += 16) {
-        const ringAlpha = (0.045 + (1 - (r - 64) / 180) * 0.09) * (1 - morph * 0.35);
+      for (let r = 52; r <= 185; r += 14) {
+        const ringAlpha = (0.045 + (1 - (r - 52) / 145) * 0.085) * (1 - morph * 0.35);
         ctx.beginPath();
         ctx.ellipse(0, 0, r * scaleX, r * scaleY, 0, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(217, 70, 239, ${ringAlpha.toFixed(3)})`;
@@ -213,54 +198,47 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       }
       ctx.restore();
 
-      // 3. Render 920 Orbiting Cosmic Purple/Orchid/White Star-Particles
+      // 820 Orbiting Cosmic Purple/Orchid/White Star-Particles
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
         const angle = p.baseAngle + simTime * p.speed;
         const rad = p.ring * (1 - morph) + p.lenteRadius * morph;
 
-        let lx = Math.cos(angle) * rad * scaleX;
-        let ly = Math.sin(angle) * rad * scaleY;
+        const lx = Math.cos(angle) * rad * scaleX;
+        const ly = Math.sin(angle) * rad * scaleY;
 
-        // Apply slight disk tilt
         let px = cx + lx * cosT - ly * sinT;
         let py = cy + lx * sinT + ly * cosT;
 
-        // Subtle spacetime lensing bend toward cursor when hovered
         if (pointerRef.current.boost > 0.01) {
           const dx = px - pointerRef.current.x;
           const dy = py - pointerRef.current.y;
           const dist2 = dx * dx + dy * dy + 2200;
-          const warp = (1600 * pointerRef.current.boost) / dist2;
-          px += dx * warp * 0.16;
-          py += dy * warp * 0.16;
+          const warp = (1400 * pointerRef.current.boost) / dist2;
+          px += dx * warp * 0.15;
+          py += dy * warp * 0.15;
         }
 
-        // Color gradient: inner rings incandescent lilac-white, mid orchid/magenta, outer deep cosmic purple
-        const closeness = Math.max(0, 1 - (rad - 56) / 190);
-        const rCol = Math.round(148 + closeness * 105 + p.hueMix * 20);
+        const closeness = Math.max(0, 1 - (rad - 44) / 150);
+        const rCol = Math.round(150 + closeness * 105 + p.hueMix * 20);
         const gCol = Math.round(52 + closeness * 165 * (p.hueMix > 0.6 ? 1 : 0.65));
-        const bCol = Math.round(215 + closeness * 40);
+        const bCol = Math.round(218 + closeness * 37);
 
         const alpha = Math.min(0.95, p.alpha * (0.7 + closeness * 0.55));
         ctx.fillStyle = `rgba(${Math.min(255, rCol)}, ${Math.min(255, gCol)}, ${Math.min(255, bCol)}, ${alpha.toFixed(3)})`;
-
-        // Slight motion streak along orbit in DISCO mode
-        const size = p.size * (0.85 + morph * 0.4);
         ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
+        ctx.arc(px, py, p.size * (0.85 + morph * 0.35), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 4. Compute Active Orbital Node Coordinates & Shoot Luminous Curved Synapses Across the Galaxy!
+      // Luminous curved filaments connecting the hovered/active 3D orbital button -> Memory Stars
       const activeIdx = Math.max(
         0,
         arcItems.findIndex((a) => a.node.id === hoverModuleRef.current)
       );
-      const arcRadius = Math.min(w * 0.34, h * 0.44);
       const activeArc = arcItems[activeIdx];
-      const srcX = cx + Math.cos(activeArc.rad) * arcRadius;
-      const srcY = cy + Math.sin(activeArc.rad) * arcRadius;
+      const srcX = w * (0.33 + Math.cos(activeArc.rad) * 0.33);
+      const srcY = h * (0.53 + Math.sin(activeArc.rad) * 0.43);
 
       const memCoords: Array<{ x: number; y: number; mem: GalaxyMemoryItem }> = [];
       const currentMemNodes = memoryNodesRef.current;
@@ -268,31 +246,26 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       for (let m = 0; m < currentMemNodes.length; m++) {
         const mn = currentMemNodes[m];
         const a = mn.angle + simTime * mn.speed;
-        const r = mn.ring * (1 - morph * 0.1) + morph * 36;
+        const r = mn.ring * (1 - morph * 0.1) + morph * 28;
         const lx = Math.cos(a) * r * (scaleX * 1.05);
         const ly = Math.sin(a) * r * (scaleY * 0.92);
         const mx = cx + lx * cosT - ly * sinT;
         const my = cy + lx * sinT + ly * cosT;
         memCoords.push({ x: mx, y: my, mem: mn.mem });
 
-        // Curved glowing neural filament connecting active orbital skill -> memory star-dot (signature screenshot #4/#5 look!)
         ctx.beginPath();
-        const midX = (srcX + mx) * 0.5 + (cy - my) * 0.14;
+        const midX = (srcX + mx) * 0.5 + (cy - my) * 0.12;
         const midY = (srcY + my) * 0.5 - (srcX - mx) * 0.08;
         ctx.moveTo(srcX, srcY);
         ctx.quadraticCurveTo(midX, midY, mx, my);
-        ctx.strokeStyle =
-          morph > 0.35
-            ? 'rgba(240, 171, 252, 0.52)'
-            : 'rgba(232, 121, 249, 0.34)';
-        ctx.lineWidth = morph > 0.35 ? 1.25 : 0.95;
+        ctx.strokeStyle = morph > 0.35 ? 'rgba(240, 171, 252, 0.55)' : 'rgba(232, 121, 249, 0.36)';
+        ctx.lineWidth = morph > 0.35 ? 1.3 : 1.0;
         ctx.stroke();
 
-        // Prominent glowing Memory Star Node
-        const glowR = morph > 0.35 ? 11 : 7;
+        const glowR = morph > 0.35 ? 10 : 6.5;
         const starGrad = ctx.createRadialGradient(mx, my, 0.5, mx, my, glowR);
         starGrad.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
-        starGrad.addColorStop(0.35, 'rgba(240, 171, 252, 0.82)');
+        starGrad.addColorStop(0.35, 'rgba(240, 171, 252, 0.85)');
         starGrad.addColorStop(1, 'rgba(192, 38, 211, 0)');
         ctx.fillStyle = starGrad;
         ctx.beginPath();
@@ -301,39 +274,36 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       }
       memoryScreenCoordsRef.current = memCoords;
 
-      // 5. Razor-Sharp Pure Pitch-Black Event Horizon Sphere + Incandescent White-Purple Photon Ring
-      const bhR = 30 + morph * 22;
+      // Pure Pitch-Black Event Horizon Sphere + White-Lilac Photon Ring
+      const bhR = 26 + morph * 16;
 
-      // Outer photon bloom ring
-      const photonGrad = ctx.createRadialGradient(cx, cy, bhR * 0.92, cx, cy, bhR * 1.48);
+      const photonGrad = ctx.createRadialGradient(cx, cy, bhR * 0.92, cx, cy, bhR * 1.5);
       photonGrad.addColorStop(0, 'rgba(255, 255, 255, 0.96)');
-      photonGrad.addColorStop(0.22, 'rgba(245, 208, 254, 0.78)');
-      photonGrad.addColorStop(0.55, 'rgba(192, 38, 211, 0.32)');
+      photonGrad.addColorStop(0.24, 'rgba(245, 208, 254, 0.78)');
+      photonGrad.addColorStop(0.56, 'rgba(192, 38, 211, 0.32)');
       photonGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = photonGrad;
       ctx.beginPath();
-      ctx.arc(cx, cy, bhR * 1.48, 0, Math.PI * 2);
+      ctx.arc(cx, cy, bhR * 1.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Pure 100% Pitch Black Void Center
       ctx.fillStyle = '#000000';
       ctx.beginPath();
       ctx.arc(cx, cy, bhR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Crisp 1.4px Photon Horizon Edge
-      ctx.strokeStyle = 'rgba(250, 232, 255, 0.9)';
+      ctx.strokeStyle = 'rgba(250, 232, 255, 0.92)';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(cx, cy, bhR + 0.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, bhR + 0.4, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Subtle AURION "A" Mark centered inside the Pure Black Event Horizon
+      // Official AURION "A" Emblem suspended inside the Pitch-Black Event Horizon
       ctx.save();
       ctx.translate(cx, cy);
       const aScale = (bhR / 34) * 0.62;
       ctx.scale(aScale, aScale);
-      ctx.fillStyle = 'rgba(245, 208, 254, 0.88)';
+      ctx.fillStyle = 'rgba(245, 208, 254, 0.92)';
       ctx.beginPath();
       ctx.moveTo(0, -22);
       ctx.lineTo(-18.5, 16.5);
@@ -373,15 +343,13 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // Clicking the central Black Hole minimizes smoothly back to the floating desktop galaxy
-    const cx = rect.width * 0.42;
-    const cy = rect.height * 0.52;
-    if (Math.hypot(clickX - cx, clickY - cy) < 34) {
+    const cx = rect.width * 0.32;
+    const cy = rect.height * 0.53;
+    if (Math.hypot(clickX - cx, clickY - cy) < 32) {
       onMinimize();
       return;
     }
 
-    // Check if user clicked any Memory star-node
     let closest: GalaxyMemoryItem | null = null;
     let minD = 26;
     for (const item of memoryScreenCoordsRef.current) {
@@ -396,7 +364,6 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
 
   return (
     <div
-      ref={containerRef}
       className="relative flex-1 h-full overflow-hidden select-none aurion-galaxy-enter"
       onMouseMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -408,15 +375,15 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
         pointerRef.current.active = false;
       }}
     >
-      {/* Top Center DISCO | LENTE Pill Switch (Signature Sagittarius Control) */}
-      <div className="absolute top-3 left-[42%] -translate-x-1/2 z-30 flex items-center p-0.5 rounded-full bg-black/80 border border-[#C026D3]/45 backdrop-blur-md shadow-[0_0_24px_rgba(168,85,247,0.25)]">
+      {/* Top DISCO | LENTE Pill Switch */}
+      <div className="absolute top-3 left-[32%] -translate-x-1/2 z-30 flex items-center p-0.5 rounded-full bg-black/85 border border-[#C026D3]/50 backdrop-blur-md shadow-[0_0_20px_rgba(168,85,247,0.28)]">
         <button
           type="button"
           onClick={() => setViewMode('disco')}
-          className={`px-3.5 py-1 rounded-full text-[10px] font-bold tracking-[0.2em] uppercase transition-all duration-500 ${
+          className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-[0.18em] uppercase transition-all duration-500 ${
             viewMode === 'disco'
-              ? 'bg-[#C026D3]/35 text-[#FAE8FF] border border-[#F0ABFC]/70 shadow-[0_0_12px_rgba(232,121,249,0.5)]'
-              : 'text-zinc-500 hover:text-zinc-200 border border-transparent'
+              ? 'bg-[#C026D3]/40 text-white border border-[#F0ABFC]/80 shadow-[0_0_12px_rgba(232,121,249,0.55)]'
+              : 'text-zinc-400 hover:text-white border border-transparent'
           }`}
         >
           DISCO
@@ -424,10 +391,10 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
         <button
           type="button"
           onClick={() => setViewMode('lente')}
-          className={`px-3.5 py-1 rounded-full text-[10px] font-bold tracking-[0.2em] uppercase transition-all duration-500 ${
+          className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-[0.18em] uppercase transition-all duration-500 ${
             viewMode === 'lente'
-              ? 'bg-[#C026D3]/35 text-[#FAE8FF] border border-[#F0ABFC]/70 shadow-[0_0_12px_rgba(232,121,249,0.5)]'
-              : 'text-zinc-500 hover:text-zinc-200 border border-transparent'
+              ? 'bg-[#C026D3]/40 text-white border border-[#F0ABFC]/80 shadow-[0_0_12px_rgba(232,121,249,0.55)]'
+              : 'text-zinc-400 hover:text-white border border-transparent'
           }`}
         >
           LENTE
@@ -441,23 +408,13 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
         className="absolute inset-0 w-full h-full cursor-pointer"
       />
 
-      {/* Curved Orbital Skill Arc Overlay (Right Side of the Galaxy) */}
+      {/* Curved Orbital Arc with 3D Glossy Purple Glass Icons + High-Contrast Legible Labels */}
       <div className="absolute inset-0 pointer-events-none">
-        <svg viewBox="0 0 640 600" preserveAspectRatio="none" className="w-full h-full">
-          <path
-            d="M 380 82 A 240 245 0 0 1 380 540"
-            fill="none"
-            stroke="#C026D3"
-            strokeOpacity="0.28"
-            strokeWidth="1"
-          />
-        </svg>
-
         {arcItems.map(({ node, idx, rad }) => {
           const isSelected = activeModule === node.id;
           const isHovered = hoveredModule === node.id;
-          const xPct = 42 + Math.cos(rad) * 33;
-          const yPct = 52 + Math.sin(rad) * 41;
+          const xPct = 33 + Math.cos(rad) * 33;
+          const yPct = 53 + Math.sin(rad) * 43;
 
           return (
             <button
@@ -469,74 +426,78 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
               style={{
                 left: `${xPct.toFixed(1)}%`,
                 top: `${yPct.toFixed(1)}%`,
-                transitionDelay: `${idx * 25}ms`,
+                transitionDelay: `${idx * 20}ms`,
               }}
-              className="pointer-events-auto group absolute -translate-y-1/2 flex items-center gap-2.5 focus:outline-none transition-all duration-500"
+              className="pointer-events-auto group absolute -translate-y-1/2 flex items-center gap-2.5 focus:outline-none transition-all duration-400"
             >
-              {/* Small Glowing Orbital Pearl Node */}
-              <span
-                className={`relative flex items-center justify-center rounded-full transition-all duration-500 ${
-                  isSelected || isHovered
-                    ? 'w-4 h-4 bg-[#F0ABFC] shadow-[0_0_16px_#E879F9] scale-110'
-                    : 'w-2.5 h-2.5 bg-[#2E074F] border border-[#E879F9]/75 group-hover:bg-[#E879F9]'
+              {/* 3D Glossy Purple-Obsidian Orb Medallion Icon (AURION Visual ID) */}
+              <div
+                className={`relative w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-400 ${
+                  isSelected || isHovered ? 'scale-110 -translate-y-0.5' : ''
                 }`}
+                style={{
+                  background:
+                    isSelected || isHovered
+                      ? 'linear-gradient(145deg, #F0ABFC 0%, #B5179E 45%, #3B0764 100%)'
+                      : 'linear-gradient(145deg, #581C87 0%, #24073F 58%, #0B0214 100%)',
+                  boxShadow:
+                    isSelected || isHovered
+                      ? 'inset 0 2px 3px rgba(255,255,255,0.65), inset 0 -3px 6px rgba(45,6,78,0.85), 0 6px 18px rgba(217,70,239,0.55), 0 0 0 1px rgba(250,232,255,0.85)'
+                      : 'inset 0 1.5px 2px rgba(245,208,254,0.35), inset 0 -3px 5px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.85), 0 0 0 1px rgba(192,38,211,0.45)',
+                }}
               >
-                {(isSelected || isHovered) && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                )}
-              </span>
+                {/* 3D Top Glass Specular Dome Highlight */}
+                <span className="absolute top-[2px] left-[4px] right-[4px] h-[38%] rounded-t-lg bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+                <node.Icon
+                  className={`relative z-10 w-4 h-4 transition-colors ${
+                    isSelected || isHovered
+                      ? 'text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.6)]'
+                      : 'text-[#F5D0FE] group-hover:text-white'
+                  }`}
+                />
+              </div>
 
-              <span
-                className={`text-[10px] font-mono tracking-[0.14em] whitespace-nowrap transition-all duration-300 ${
+              {/* Crisp, High-Contrast Legible Text Label */}
+              <div
+                className={`px-2.5 py-1 rounded-lg border backdrop-blur-md transition-all duration-300 text-left ${
                   isSelected
-                    ? 'text-[#FAE8FF] font-bold drop-shadow-[0_0_8px_rgba(240,171,252,0.7)]'
+                    ? 'bg-[#260642]/95 border-[#F0ABFC]/80 shadow-[0_0_16px_rgba(217,70,239,0.4)]'
                     : isHovered
-                    ? 'text-white translate-x-0.5'
-                    : 'text-zinc-400/90 hover:text-zinc-200'
+                    ? 'bg-[#150424]/95 border-[#C026D3]/65 translate-x-0.5'
+                    : 'bg-black/80 border-white/10 hover:border-[#C026D3]/45'
                 }`}
               >
-                {node.label.toLowerCase()}
-              </span>
+                <div
+                  className={`text-[12px] font-semibold tracking-wide leading-tight whitespace-nowrap ${
+                    isSelected ? 'text-white' : 'text-zinc-100'
+                  }`}
+                >
+                  {node.label}
+                </div>
+              </div>
             </button>
           );
         })}
       </div>
 
-      {/* Floating Memory / Markdown Preview Card (when clicking a glowing star in DISCO or LENTE) */}
+      {/* Floating Memory Preview Card */}
       {selectedMemory && (
-        <div className="aurion-panel-switch absolute bottom-5 left-5 max-w-[270px] p-3.5 rounded-xl bg-black/90 border border-[#C026D3]/60 backdrop-blur-xl shadow-[0_0_32px_rgba(168,85,247,0.3)] z-30">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#F0ABFC]">
+        <div className="aurion-panel-switch absolute bottom-4 left-4 max-w-[240px] p-3 rounded-xl bg-black/95 border border-[#C026D3]/65 backdrop-blur-xl shadow-[0_0_28px_rgba(168,85,247,0.35)] z-30">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#F0ABFC]">
               {selectedMemory.scope}
             </span>
             <button
               type="button"
               onClick={() => setSelectedMemory(null)}
-              className="text-[10px] text-zinc-500 hover:text-white"
+              className="text-xs text-zinc-400 hover:text-white"
             >
               ✕
             </button>
           </div>
-          <p className="text-[11px] text-zinc-200 leading-relaxed">{selectedMemory.fact_text}</p>
-          <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] font-mono text-zinc-500">
-            <span>SINAPSE IMP {selectedMemory.importance}/10</span>
-            <button
-              type="button"
-              onClick={() => onSelectModule('notes')}
-              className="text-[#E879F9] hover:text-white"
-            >
-              Abrir mapa ➔
-            </button>
-          </div>
+          <p className="text-xs text-zinc-100 leading-relaxed">{selectedMemory.fact_text}</p>
         </div>
       )}
-
-      {/* Subtle hint at bottom center */}
-      <div className="absolute bottom-2.5 left-[42%] -translate-x-1/2 text-[9px] font-mono tracking-[0.22em] text-zinc-600 uppercase pointer-events-none">
-        {viewMode === 'disco'
-          ? 'Clique nos pontos da galáxia ou nas funções à direita'
-          : 'Modo Lente • Clique em qualquer memória estelar'}
-      </div>
     </div>
   );
 };
