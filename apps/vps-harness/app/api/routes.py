@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal, utc_now_iso
+from app.core.humanizer import HUMANIZER_SYSTEM_PROMPT, humanize_text
 from app.core.memory_service import (
     append_timeline_entry,
     list_memory_markdown_files,
@@ -646,7 +647,10 @@ async def chat_completion(body: ChatReq) -> Dict[str, Any]:
 
     task_type = classify_task_intent(body.message)
     mem_ctx = await recall_relevant_context(body.message, limit=6)
-    system_prompt = "Você é o AURION, orquestrador digital conciso em PT-BR."
+    system_prompt = (
+        "Você é o AURION, orquestrador digital pessoal do Felipe.\n"
+        f"{HUMANIZER_SYSTEM_PROMPT}"
+    )
     if mem_ctx["context_block"]:
         system_prompt += f"\n\nUse o contexto de infraestrutura e memória persistente abaixo quando relevante:\n{mem_ctx['context_block']}"
 
@@ -659,6 +663,7 @@ async def chat_completion(body: ChatReq) -> Dict[str, Any]:
         task_type=task_type,
         force_claude=body.force_claude,
     )
+    res["content"] = humanize_text(res["content"])
     append_timeline_entry(
         f"Chat ({res['provider_used']}): {body.message[:120]}",
         category="CHAT",
@@ -683,9 +688,15 @@ class VoiceTtsReq(BaseModel):
 @router.post("/voice/tts")
 async def voice_tts(body: VoiceTtsReq) -> Response:
     tunnel = _get_tunnel()
+    adaptive = _get_router()
+    el_key = await adaptive.get_secret("ELEVENLABS_API_KEY")
     await tunnel.broadcast({"type": "EYE_STATE", "state": "SPEAKING"})
     try:
-        mp3_bytes = await synthesize_speech_mp3(body.text, voice=body.voice)
+        mp3_bytes = await synthesize_speech_mp3(
+            body.text,
+            voice=body.voice,
+            elevenlabs_api_key=el_key,
+        )
         return Response(content=mp3_bytes, media_type="audio/mpeg")
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Falha ao sintetizar voz neural: {exc}")

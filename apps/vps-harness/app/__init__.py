@@ -1,1 +1,0 @@
-# AURION VPS Harness Package

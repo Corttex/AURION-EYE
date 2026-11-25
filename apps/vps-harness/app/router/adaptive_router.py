@@ -121,6 +121,15 @@ DEFAULT_PROVIDERS: List[ProviderNode] = [
         priority=3,
     ),
     ProviderNode(
+        id="runcrate_ai",
+        name="RunCrate AI Gateway",
+        base_url="https://api.runcrate.ai/v1/chat/completions",
+        model="auto",
+        api_key_vault_ref="RUNCRATE_API_KEY",
+        supported_tasks=[TaskType.GENERAL, TaskType.CODING, TaskType.FAST_VOICE],
+        priority=2,
+    ),
+    ProviderNode(
         id="openrouter_free_pool",
         name="OpenRouter Free Auto",
         base_url="https://openrouter.ai/api/v1/chat/completions",

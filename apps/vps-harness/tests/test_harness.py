@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.humanizer import humanize_for_speech, humanize_text
 from app.core.redis_client import InMemoryRedis
 from app.core.security import VaultService
 from app.main import app
@@ -14,6 +15,17 @@ def test_vault_aes256_roundtrip():
     assert encrypted != secret
     assert vault.decrypt(encrypted) == secret
     assert "999" in vault.mask(secret)
+
+
+def test_humanizer_strips_robotic_patterns():
+    raw = "Certamente! Ótima pergunta! Em suma, é crucial mergulhar fundo no deploy. Espero que isso ajude!"
+    clean = humanize_text(raw)
+    assert "Certamente" not in clean
+    assert "Espero que isso ajude" not in clean
+    assert "ir direto ao ponto" in clean
+    spoken = humanize_for_speech("**Pronto!** Acesse https://eyeglobal.aurionagency.com.br agora.")
+    assert "*" not in spoken
+    assert "https://" not in spoken
 
 
 @pytest.mark.asyncio

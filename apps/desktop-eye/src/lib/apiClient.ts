@@ -7,7 +7,7 @@ export interface AurionConnectionConfig {
 
 export const CLOUD_ORIGIN = 'https://eyeglobal.aurionagency.com.br';
 export const LOCAL_HTTP = 'http://localhost:8000';
-export const LOCAL_WEB_MAIN = 'http://localhost:3011';
+export const LOCAL_WEB_MAIN = 'http://localhost:3015';
 
 const ENV_HTTP =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_VPS_HTTP_URL || '';

@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 import os
 import uuid
+from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
+
+load_dotenv()
 
 from app.api.routes import RUNTIME_REFS, public_router, router
 from app.core.config import get_settings

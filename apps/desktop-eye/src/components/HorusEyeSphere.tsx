@@ -16,15 +16,26 @@ interface HorusEyeSphereProps {
   onDragStateChange?: (over: boolean) => void;
 }
 
+// Paleta oficial da Logo AURION CO. (Roxo Cósmico -> Magenta -> Orquídea Luminosa)
 const STATE_RING_COLOR: Record<EyeState, string> = {
-  IDLE: '#D4AF37',
-  LISTENING: '#B8FF2C',
-  THINKING: '#8B5CF6',
-  SPEAKING: '#B8FF2C',
-  EXECUTING_TUNNEL: '#D4AF37',
-  ALERT: '#EF4444',
-  FOCUS: '#D4AF37',
+  IDLE: '#B5179E',
+  LISTENING: '#E879F9',
+  THINKING: '#9333EA',
+  SPEAKING: '#F0ABFC',
+  EXECUTING_TUNNEL: '#C026D3',
+  ALERT: '#F43F5E',
+  FOCUS: '#A855F7',
 };
+
+const ORBITAL_DOTS = Array.from({ length: 24 }, (_, idx) => {
+  const angle = (idx / 24) * Math.PI * 2;
+  return {
+    x: 50 + Math.cos(angle) * 44,
+    y: 50 + Math.sin(angle) * 44,
+    r: idx % 2 === 0 ? 1.55 : 1.0,
+    opacity: 0.45 + (idx % 4) * 0.14,
+  };
+});
 
 export const HorusEyeSphere: React.FC<HorusEyeSphereProps> = ({
   eyeState,
@@ -41,11 +52,10 @@ export const HorusEyeSphere: React.FC<HorusEyeSphereProps> = ({
 }) => {
   const targetVec = useRef({ x: 0, y: 0 });
   const currentVec = useRef({ x: 0, y: 0 });
-  const [irisOffset, setIrisOffset] = useState({ x: 0, y: 0 });
-  const [isBlinking, setIsBlinking] = useState(false);
+  const [lensOffset, setLensOffset] = useState({ x: 0, y: 0 });
   const [pulsePhase, setPulsePhase] = useState(0);
 
-  // Global 60Hz cursor-vector subscription
+  // Global 60Hz cursor-vector subscription for gravitational lensing core
   useEffect(() => {
     return subscribeCursorVector(
       (vec) => {
@@ -55,48 +65,33 @@ export const HorusEyeSphere: React.FC<HorusEyeSphereProps> = ({
     );
   }, [onPanicTrigger]);
 
-  // Smooth 60fps lerp + organic micro-saccades + speaking modulation
+  // Smooth 60fps gravitational drift + organic breathing + audio modulation
   useEffect(() => {
     let raf = 0;
     const tick = (t: number) => {
-      const microX = Math.sin(t * 0.0017) * 0.06;
-      const microY = Math.cos(t * 0.0023) * 0.05;
-      currentVec.current.x += (targetVec.current.x + microX - currentVec.current.x) * 0.14;
-      currentVec.current.y += (targetVec.current.y + microY - currentVec.current.y) * 0.14;
-      setIrisOffset({
-        x: currentVec.current.x * (compact ? 5.5 : 8.5),
-        y: currentVec.current.y * (compact ? 4.0 : 6.0),
+      const microX = Math.sin(t * 0.0014) * 0.08;
+      const microY = Math.cos(t * 0.0019) * 0.07;
+      currentVec.current.x += (targetVec.current.x + microX - currentVec.current.x) * 0.12;
+      currentVec.current.y += (targetVec.current.y + microY - currentVec.current.y) * 0.12;
+      setLensOffset({
+        x: currentVec.current.x * (compact ? 4.2 : 6.5),
+        y: currentVec.current.y * (compact ? 3.5 : 5.2),
       });
-      setPulsePhase((Math.sin(t * 0.008) + 1) * 0.5);
+      setPulsePhase((Math.sin(t * 0.006) + 1) * 0.5);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [compact]);
 
-  // Natural blinks every 4-7 seconds
-  useEffect(() => {
-    let timeoutId: number;
-    const scheduleBlink = () => {
-      const delay = 4000 + Math.random() * 3000;
-      timeoutId = window.setTimeout(() => {
-        setIsBlinking(true);
-        window.setTimeout(() => setIsBlinking(false), 140);
-        scheduleBlink();
-      }, delay);
-    };
-    scheduleBlink();
-    return () => clearTimeout(timeoutId);
-  }, []);
-
-  const sizePx = compact ? 76 : 104;
-  const ringColor = isDragOver ? '#D4AF37' : STATE_RING_COLOR[eyeState];
-  const pupilScale =
+  const sizePx = compact ? 78 : 108;
+  const ringColor = isDragOver ? '#F0ABFC' : STATE_RING_COLOR[eyeState];
+  const coreScale =
     eyeState === 'LISTENING'
-      ? 1.28
+      ? 1.12
       : eyeState === 'SPEAKING'
-      ? 0.95 + (audioLevel > 0.02 ? audioLevel * 0.65 : pulsePhase * 0.45)
-      : 1;
+      ? 0.96 + (audioLevel > 0.02 ? audioLevel * 0.42 : pulsePhase * 0.24)
+      : 1 + pulsePhase * 0.03;
 
   const focusPct = focusRemainingSec !== null ? Math.max(0, Math.min(1, focusRemainingSec / (25 * 60))) : 0;
 
@@ -116,68 +111,84 @@ export const HorusEyeSphere: React.FC<HorusEyeSphereProps> = ({
       }}
     >
       {banner && (
-        <div className="mb-1.5 px-2.5 py-0.5 rounded-full bg-obsidian-900/95 border border-aurion-gold/60 text-[10px] font-medium text-aurion-lime tracking-wide whitespace-nowrap shadow-lg">
+        <div className="mb-1.5 px-2.5 py-0.5 rounded-full bg-[#12071F]/95 border border-[#E066FF]/60 text-[10px] font-medium text-[#F5B7FF] tracking-wide whitespace-nowrap shadow-lg">
           {banner}
         </div>
       )}
 
       {isDragOver && (
-        <div className="mb-1.5 px-2.5 py-0.5 rounded-full bg-aurion-gold text-obsidian-950 text-[10px] font-bold tracking-wider whitespace-nowrap animate-pulse">
-          Solte para converter
+        <div className="mb-1.5 px-2.5 py-0.5 rounded-full bg-[#B5179E] text-white text-[10px] font-bold tracking-wider whitespace-nowrap animate-pulse shadow-[0_0_16px_#E066FF]">
+          Solte na singularidade
         </div>
       )}
 
       <button
         type="button"
         onClick={onClick}
-        title="AURION Eye — Clique para abrir HUB Radial"
+        title="AURION Singularity — Clique para abrir HUB Radial"
         style={{ width: sizePx, height: sizePx }}
         className={`relative rounded-full flex items-center justify-center transition-transform duration-300 active:scale-95 focus:outline-none ${
           isDragOver ? 'scale-110' : 'hover:scale-105'
         }`}
       >
-        {/* Outer reactive aura */}
+        {/* Outer purple gravitational halo (AURION CO. brand glow) */}
         <span
-          className="absolute inset-0 rounded-full blur-md transition-opacity duration-300 pointer-events-none"
+          className="absolute -inset-2.5 rounded-full blur-xl transition-opacity duration-300 pointer-events-none"
           style={{
-            background: `radial-gradient(circle, ${ringColor}44 0%, transparent 72%)`,
-            opacity: eyeState === 'IDLE' && !isDragOver ? 0.55 : 0.95,
+            background: `radial-gradient(circle, ${ringColor}66 0%, #6B0F6C44 45%, transparent 74%)`,
+            opacity: eyeState === 'IDLE' && !isDragOver ? 0.65 + pulsePhase * 0.2 : 1,
           }}
         />
 
-        {/* Listening sound wave ring */}
+        {/* Listening soundwave accretion pulse */}
         {eyeState === 'LISTENING' && (
-          <span className="absolute -inset-1.5 rounded-full border border-aurion-lime/70 animate-ping pointer-events-none" />
+          <span className="absolute -inset-2 rounded-full border border-[#F0ABFC]/80 animate-ping pointer-events-none" />
         )}
 
-        {/* Active tunnel rotating arc */}
-        {(activeTunnelsCount > 0 || eyeState === 'EXECUTING_TUNNEL' || eyeState === 'THINKING') && (
-          <svg
-            viewBox="0 0 100 100"
-            className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] animate-spin-slow pointer-events-none"
-          >
+        {/* AURION CO. Dotted Orbital Halo Ring */}
+        <svg
+          viewBox="0 0 100 100"
+          className={`absolute -inset-2 w-[calc(100%+16px)] h-[calc(100%+16px)] pointer-events-none ${
+            eyeState === 'THINKING' || eyeState === 'EXECUTING_TUNNEL' || activeTunnelsCount > 0
+              ? 'animate-spin'
+              : 'animate-spin-slow'
+          }`}
+          style={{
+            animationDuration:
+              eyeState === 'THINKING' ? '3.5s' : activeTunnelsCount > 0 ? '8s' : '26s',
+          }}
+        >
+          <defs>
+            <linearGradient id="aurionDotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#F5B7FF" />
+              <stop offset="50%" stopColor="#B5179E" />
+              <stop offset="100%" stopColor="#3B185F" />
+            </linearGradient>
+          </defs>
+          {ORBITAL_DOTS.map((d, i) => (
             <circle
-              cx="50"
-              cy="50"
-              r="47"
-              fill="none"
-              stroke={eyeState === 'THINKING' ? '#8B5CF6' : '#B8FF2C'}
-              strokeWidth="2.5"
-              strokeDasharray="65 230"
-              strokeLinecap="round"
+              key={i}
+              cx={d.x}
+              cy={d.y}
+              r={d.r}
+              fill="url(#aurionDotGrad)"
+              opacity={d.opacity}
             />
-          </svg>
-        )}
+          ))}
+        </svg>
 
         {/* Focus countdown ring */}
         {focusRemainingSec !== null && focusRemainingSec > 0 && (
-          <svg viewBox="0 0 100 100" className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] -rotate-90 pointer-events-none">
+          <svg
+            viewBox="0 0 100 100"
+            className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] -rotate-90 pointer-events-none"
+          >
             <circle
               cx="50"
               cy="50"
               r="46"
               fill="none"
-              stroke="#D4AF37"
+              stroke="#E879F9"
               strokeWidth="2.5"
               strokeDasharray={289}
               strokeDashoffset={289 * (1 - focusPct)}
@@ -186,72 +197,100 @@ export const HorusEyeSphere: React.FC<HorusEyeSphereProps> = ({
           </svg>
         )}
 
-        {/* Obsidian GlassLiquid Sphere */}
+        {/* Black Hole Event Horizon + Purple Accretion Rim */}
         <div
-          className="relative w-full h-full rounded-full bg-obsidian-950/95 border shadow-2xl flex items-center justify-center overflow-hidden backdrop-blur-xl"
+          className="relative w-full h-full rounded-full flex items-center justify-center overflow-hidden"
           style={{
-            borderColor: ringColor,
-            boxShadow: `inset 0 2px 10px rgba(255,255,255,0.08), 0 0 22px ${ringColor}33`,
+            background: 'radial-gradient(circle at 50% 50%, #020006 52%, #1C0633 74%, #7C0D68 90%, #E879F9 100%)',
+            border: `1.5px solid ${ringColor}`,
+            boxShadow: `
+              inset 0 0 18px rgba(224, 102, 255, 0.55),
+              inset 0 0 6px rgba(245, 183, 255, 0.8),
+              0 0 24px ${ringColor}66,
+              0 0 42px rgba(124, 13, 104, 0.45)
+            `,
           }}
         >
-          {/* Specular glass reflection */}
-          <div className="absolute top-1.5 left-1/4 w-1/2 h-1/4 rounded-full bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+          {/* Relativistic Accretion Swirl SVG */}
+          <svg
+            viewBox="0 0 100 100"
+            className="absolute inset-0 w-full h-full animate-spin-slow pointer-events-none"
+            style={{
+              animationDuration: eyeState === 'THINKING' ? '2.2s' : eyeState === 'SPEAKING' ? '4.5s' : '11s',
+            }}
+          >
+            <defs>
+              <linearGradient id="accretionArc1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#F5B7FF" stopOpacity="0.95" />
+                <stop offset="45%" stopColor="#B5179E" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#3B185F" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="accretionArc2" x1="100%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#E066FF" stopOpacity="0.9" />
+                <stop offset="60%" stopColor="#7C0D68" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#2C1654" stopOpacity="0" />
+              </linearGradient>
+            </defs>
 
-          {/* Sacred Eye of Horus Vector */}
-          <svg viewBox="0 0 100 100" className="w-[78%] h-[78%]">
-            {/* Brow & Outer Eye Contour in Metallic Gold */}
-            <path
-              d="M14 42 Q50 18 86 42"
+            {/* Inner photon ring arcs */}
+            <circle
+              cx="50"
+              cy="50"
+              r="39"
               fill="none"
-              stroke="#D4AF37"
-              strokeWidth="2.6"
+              stroke="url(#accretionArc1)"
+              strokeWidth="4.2"
+              strokeDasharray="105 140"
               strokeLinecap="round"
             />
-            <path
-              d="M18 49 Q50 31 82 49 Q50 67 18 49 Z"
-              fill="#0C0D12"
-              stroke="#D4AF37"
-              strokeWidth="2.3"
-            />
-            {/* Horus spiral teardrop */}
-            <path
-              d="M48 62 L48 76 Q48 84 40 84 Q35 84 35 79"
+            <circle
+              cx="50"
+              cy="50"
+              r="34"
               fill="none"
-              stroke="#D4AF37"
-              strokeWidth="2.2"
+              stroke="url(#accretionArc2)"
+              strokeWidth="2.4"
+              strokeDasharray="78 136"
+              strokeDashoffset="60"
               strokeLinecap="round"
             />
-            <path
-              d="M64 59 L74 79"
-              fill="none"
-              stroke="#D4AF37"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
-
-            {/* Tracked Iris & Neon-Lime Pupil */}
-            <g
-              transform={`translate(${irisOffset.x}, ${irisOffset.y}) scale(1, ${isBlinking ? 0.12 : 1})`}
-              style={{ transformOrigin: '50px 49px', transition: 'transform 60ms linear' }}
-            >
-              <circle cx="50" cy="49" r="10.5" fill="#11131A" stroke="#D4AF37" strokeWidth="1.6" />
-              <circle
-                cx="50"
-                cy="49"
-                r={5.2 * pupilScale}
-                fill={eyeState === 'ALERT' ? '#EF4444' : '#B8FF2C'}
-              />
-              <circle cx="52.2" cy="46.5" r="1.5" fill="#FFFFFF" opacity="0.85" />
-            </g>
           </svg>
+
+          {/* Cursor-tracked Gravitational Singularity Core */}
+          <div
+            className="relative rounded-full pointer-events-none"
+            style={{
+              width: '62%',
+              height: '62%',
+              transform: `translate(${lensOffset.x}px, ${lensOffset.y}px) scale(${coreScale})`,
+              transition: 'transform 70ms linear',
+              background: 'radial-gradient(circle at 46% 44%, #000000 62%, #090114 84%, #6D0E66 100%)',
+              boxShadow: `
+                0 0 14px rgba(0, 0, 0, 0.98),
+                0 0 22px ${ringColor}88,
+                inset 0 0 10px rgba(240, 171, 252, ${eyeState === 'SPEAKING' ? 0.55 : 0.25})
+              `,
+            }}
+          >
+            {/* Subtle gravitational photon glint on the event horizon edge */}
+            <span
+              className="absolute top-[10%] left-[16%] w-[34%] h-[16%] rounded-full blur-[1px] pointer-events-none"
+              style={{
+                background: 'linear-gradient(90deg, rgba(245,183,255,0.75), rgba(181,23,158,0.1))',
+                transform: 'rotate(-28deg)',
+              }}
+            />
+          </div>
         </div>
       </button>
 
       {focusRemainingSec !== null && focusRemainingSec > 0 && !compact && (
-        <span className="mt-1 px-2 py-0.5 rounded bg-obsidian-900/90 border border-obsidian-border text-[10px] font-mono text-aurion-gold">
-          {String(Math.floor(focusRemainingSec / 60)).padStart(2, '0')}:
-          {String(focusRemainingSec % 60).padStart(2, '0')}
-        </span>
+        <div className="mt-1 px-2 py-0.5 rounded bg-[#12071F]/90 border border-[#B5179E]/50 text-[10px] font-mono text-[#F5B7FF]">
+          {Math.floor(focusRemainingSec / 60)
+            .toString()
+            .padStart(2, '0')}
+          :{(focusRemainingSec % 60).toString().padStart(2, '0')}
+        </div>
       )}
     </div>
   );
