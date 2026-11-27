@@ -18,14 +18,25 @@ interface AurionGalaxyStageProps {
   onMinimize: () => void;
 }
 
-interface OrbitParticle {
+interface AmbientStar {
   ring: number;
   baseAngle: number;
   speed: number;
   size: number;
   alpha: number;
-  hueMix: number;
   lenteRadius: number;
+}
+
+interface GalaxyEntityDot {
+  kind: 'module' | 'memory';
+  id: string;
+  label: string;
+  moduleId?: EyeModuleId;
+  memory?: GalaxyMemoryItem;
+  ring: number;
+  baseAngle: number;
+  speed: number;
+  color: string;
 }
 
 function seededRand(seed: number): number {
@@ -56,61 +67,57 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
   eyeStateRef.current = eyeState;
 
   const pointerRef = useRef({ x: 0, y: 0, active: false, boost: 0 });
-  const memoryScreenCoordsRef = useRef<Array<{ x: number; y: number; mem: GalaxyMemoryItem }>>([]);
+  const entityScreenCoordsRef = useRef<Array<{ x: number; y: number; dot: GalaxyEntityDot }>>([]);
 
-  const particles = useMemo<OrbitParticle[]>(() => {
-    const list: OrbitParticle[] = [];
-    for (let i = 0; i < 820; i++) {
+  // Airy, clean cosmic dust background (220 subtle micro-stars so the real entity dots stand out clearly)
+  const ambientStars = useMemo<AmbientStar[]>(() => {
+    const list: AmbientStar[] = [];
+    for (let i = 0; i < 220; i++) {
       const r1 = seededRand(i * 3 + 1);
       const r2 = seededRand(i * 3 + 2);
       const r3 = seededRand(i * 3 + 3);
-      const r4 = seededRand(i * 3 + 4);
-
-      const ringIndex = Math.pow(r1, 1.35);
-      const baseRing = 44 + ringIndex * 145;
-      const keplerSpeed = (0.04 + (1 - ringIndex) * 0.12) * (0.8 + r2 * 0.4);
-
+      const ringNorm = Math.pow(r1, 1.25);
       list.push({
-        ring: baseRing,
+        ring: 46 + ringNorm * 145,
         baseAngle: r2 * Math.PI * 2,
-        speed: keplerSpeed,
-        size: r3 > 0.94 ? 2.1 : 0.65 + r3 * 1.1,
-        alpha: 0.24 + (1 - ringIndex) * 0.58 + r4 * 0.16,
-        hueMix: r4,
+        speed: 0.025 + (1 - ringNorm) * 0.075,
+        size: 0.55 + r3 * 0.9,
+        alpha: 0.14 + (1 - ringNorm) * 0.34,
         lenteRadius: 56 + Math.pow(r1, 0.85) * 180,
       });
     }
     return list;
   }, []);
 
-  const memoryNodes = useMemo(() => {
-    const safeMems =
-      memories.length > 0
-        ? memories
-        : [
-            {
-              id: 'm_default_1',
-              scope: 'vps:hetzner-main',
-              fact_text: 'Hetzner 16GB/80GB conectada ao Coolify • Gateway :3011 ativo.',
-              importance: 9,
-            },
-            {
-              id: 'm_default_2',
-              scope: 'project:aurion',
-              fact_text: 'Pool de 11 APIs gratuitas + Hermes 3 + ElevenLabs + Humanizer PT-BR.',
-              importance: 9,
-            },
-          ];
+  // Each dot in the galaxy represents ONE real thing (function, memory, config) — grows organically as you add more!
+  const entityDots = useMemo<GalaxyEntityDot[]>(() => {
+    const moduleDots: GalaxyEntityDot[] = RADIAL_NODES.map((node, idx) => ({
+      kind: 'module',
+      id: `dot-${node.id}`,
+      label: node.label,
+      moduleId: node.id,
+      ring: 68 + ((idx * 17) % 88),
+      baseAngle: (idx / RADIAL_NODES.length) * Math.PI * 2 - 0.5,
+      speed: 0.032 + (idx % 3) * 0.012,
+      color: '#F0ABFC',
+    }));
 
-    return safeMems.map((mem, idx) => {
-      const angle = (idx / Math.max(1, safeMems.length)) * Math.PI * 2 + 0.45;
-      const ring = 66 + ((idx * 31) % 92);
-      return { mem, angle, ring, speed: 0.028 + (idx % 4) * 0.008 };
-    });
+    const memoryDots: GalaxyEntityDot[] = memories.map((mem, idx) => ({
+      kind: 'memory',
+      id: mem.id,
+      label: mem.scope,
+      memory: mem,
+      ring: 82 + ((idx * 29) % 94),
+      baseAngle: (idx / Math.max(1, memories.length)) * Math.PI * 2 + 0.8,
+      speed: 0.024 + (idx % 4) * 0.009,
+      color: '#C084FC',
+    }));
+
+    return [...moduleDots, ...memoryDots];
   }, [memories]);
 
-  const memoryNodesRef = useRef(memoryNodes);
-  memoryNodesRef.current = memoryNodes;
+  const entityDotsRef = useRef(entityDots);
+  entityDotsRef.current = entityDots;
 
   const arcItems = useMemo(() => {
     return RADIAL_NODES.map((node, idx) => {
@@ -158,14 +165,13 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
 
       const stateRate =
         eyeStateRef.current === 'THINKING'
-          ? 1.9
+          ? 1.85
           : eyeStateRef.current === 'SPEAKING'
           ? 1.35
           : 0.65;
 
-      simTime += dt * stateRate * (1 + pointerRef.current.boost * 1.0);
+      simTime += dt * stateRate * (1 + pointerRef.current.boost * 0.85);
 
-      // Center of the Purple Black Hole on the left-center of the stage
       const cx = w * 0.32;
       const cy = h * 0.53;
 
@@ -175,21 +181,21 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      // Deep cosmic purple glow
-      const bgGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, Math.max(w, h) * 0.45);
-      bgGlow.addColorStop(0, 'rgba(192, 38, 211, 0.26)');
-      bgGlow.addColorStop(0.32, 'rgba(126, 34, 206, 0.12)');
-      bgGlow.addColorStop(0.68, 'rgba(59, 7, 100, 0.04)');
+      // Deep cosmic purple ambient glow
+      const bgGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, Math.max(w, h) * 0.44);
+      bgGlow.addColorStop(0, 'rgba(192, 38, 211, 0.24)');
+      bgGlow.addColorStop(0.32, 'rgba(126, 34, 206, 0.11)');
+      bgGlow.addColorStop(0.68, 'rgba(59, 7, 100, 0.03)');
       bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = bgGlow;
       ctx.fillRect(0, 0, w, h);
 
-      // Concentric faint orbit rings
+      // Faint concentric orbital tracks
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(tiltRad);
-      for (let r = 52; r <= 185; r += 14) {
-        const ringAlpha = (0.045 + (1 - (r - 52) / 145) * 0.085) * (1 - morph * 0.35);
+      for (let r = 56; r <= 184; r += 16) {
+        const ringAlpha = (0.05 + (1 - (r - 56) / 140) * 0.08) * (1 - morph * 0.35);
         ctx.beginPath();
         ctx.ellipse(0, 0, r * scaleX, r * scaleY, 0, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(217, 70, 239, ${ringAlpha.toFixed(3)})`;
@@ -198,85 +204,92 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       }
       ctx.restore();
 
-      // 820 Orbiting Cosmic Purple/Orchid/White Star-Particles
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
+      // Subtle background micro-stars
+      for (let i = 0; i < ambientStars.length; i++) {
+        const p = ambientStars[i];
         const angle = p.baseAngle + simTime * p.speed;
         const rad = p.ring * (1 - morph) + p.lenteRadius * morph;
-
         const lx = Math.cos(angle) * rad * scaleX;
         const ly = Math.sin(angle) * rad * scaleY;
+        const px = cx + lx * cosT - ly * sinT;
+        const py = cy + lx * sinT + ly * cosT;
 
-        let px = cx + lx * cosT - ly * sinT;
-        let py = cy + lx * sinT + ly * cosT;
+        ctx.fillStyle = `rgba(216, 180, 254, ${p.alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-        if (pointerRef.current.boost > 0.01) {
-          const dx = px - pointerRef.current.x;
-          const dy = py - pointerRef.current.y;
-          const dist2 = dx * dx + dy * dy + 2200;
-          const warp = (1400 * pointerRef.current.boost) / dist2;
-          px += dx * warp * 0.15;
-          py += dy * warp * 0.15;
+      // Render Each Real Entity Dot + Fixed Rotating Line Anchored to its Galaxy Dot
+      const dots = entityDotsRef.current;
+      const screenCoords: Array<{ x: number; y: number; dot: GalaxyEntityDot }> = [];
+
+      for (let i = 0; i < dots.length; i++) {
+        const dot = dots[i];
+        const angle = dot.baseAngle + simTime * dot.speed;
+        const rad = dot.ring + morph * 28;
+        const lx = Math.cos(angle) * rad * (scaleX * 1.04);
+        const ly = Math.sin(angle) * rad * (scaleY * 0.96);
+        const dx = cx + lx * cosT - ly * sinT;
+        const dy = cy + lx * sinT + ly * cosT;
+        screenCoords.push({ x: dx, y: dy, dot });
+
+        if (dot.kind === 'module' && dot.moduleId) {
+          const arcMatch = arcItems.find((a) => a.node.id === dot.moduleId);
+          if (arcMatch) {
+            const btnX = w * (0.33 + Math.cos(arcMatch.rad) * 0.33);
+            const btnY = h * (0.53 + Math.sin(arcMatch.rad) * 0.43);
+            const isActive = hoverModuleRef.current === dot.moduleId;
+
+            // Line stays FIXED/LOCKED onto the rotating galaxy dot and sweeps smoothly with it!
+            ctx.beginPath();
+            const midX = (btnX + dx) * 0.5 + (cy - dy) * 0.1;
+            const midY = (btnY + dy) * 0.5 - (btnX - dx) * 0.06;
+            ctx.moveTo(btnX, btnY);
+            ctx.quadraticCurveTo(midX, midY, dx, dy);
+            ctx.strokeStyle = isActive
+              ? 'rgba(250, 232, 255, 0.85)'
+              : 'rgba(192, 38, 211, 0.24)';
+            ctx.lineWidth = isActive ? 1.5 : 0.85;
+            ctx.stroke();
+          }
+        } else if (dot.kind === 'memory') {
+          // Memory dots connect cleanly to the MEMÓRIA orbital button
+          const memArc = arcItems.find((a) => a.node.id === 'notes');
+          if (memArc) {
+            const btnX = w * (0.33 + Math.cos(memArc.rad) * 0.33);
+            const btnY = h * (0.53 + Math.sin(memArc.rad) * 0.43);
+            const isMemActive = hoverModuleRef.current === 'notes' || morph > 0.35;
+            ctx.beginPath();
+            ctx.moveTo(btnX, btnY);
+            ctx.quadraticCurveTo((btnX + dx) * 0.5, (btnY + dy) * 0.5 - 18, dx, dy);
+            ctx.strokeStyle = isMemActive
+              ? 'rgba(232, 121, 249, 0.55)'
+              : 'rgba(168, 85, 247, 0.16)';
+            ctx.lineWidth = isMemActive ? 1.1 : 0.65;
+            ctx.stroke();
+          }
         }
 
-        const closeness = Math.max(0, 1 - (rad - 44) / 150);
-        const rCol = Math.round(150 + closeness * 105 + p.hueMix * 20);
-        const gCol = Math.round(52 + closeness * 165 * (p.hueMix > 0.6 ? 1 : 0.65));
-        const bCol = Math.round(218 + closeness * 37);
+        // Draw prominent glowing entity star-dot in the galaxy
+        const isHighlighted =
+          (dot.kind === 'module' && hoverModuleRef.current === dot.moduleId) ||
+          (dot.kind === 'memory' && (hoverModuleRef.current === 'notes' || morph > 0.35));
 
-        const alpha = Math.min(0.95, p.alpha * (0.7 + closeness * 0.55));
-        ctx.fillStyle = `rgba(${Math.min(255, rCol)}, ${Math.min(255, gCol)}, ${Math.min(255, bCol)}, ${alpha.toFixed(3)})`;
+        const glowR = isHighlighted ? 11 : 6.5;
+        const g = ctx.createRadialGradient(dx, dy, 0.5, dx, dy, glowR);
+        g.addColorStop(0, '#FFFFFF');
+        g.addColorStop(0.35, dot.color);
+        g.addColorStop(1, 'rgba(192, 38, 211, 0)');
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(px, py, p.size * (0.85 + morph * 0.35), 0, Math.PI * 2);
+        ctx.arc(dx, dy, glowR, 0, Math.PI * 2);
         ctx.fill();
       }
-
-      // Luminous curved filaments connecting the hovered/active 3D orbital button -> Memory Stars
-      const activeIdx = Math.max(
-        0,
-        arcItems.findIndex((a) => a.node.id === hoverModuleRef.current)
-      );
-      const activeArc = arcItems[activeIdx];
-      const srcX = w * (0.33 + Math.cos(activeArc.rad) * 0.33);
-      const srcY = h * (0.53 + Math.sin(activeArc.rad) * 0.43);
-
-      const memCoords: Array<{ x: number; y: number; mem: GalaxyMemoryItem }> = [];
-      const currentMemNodes = memoryNodesRef.current;
-
-      for (let m = 0; m < currentMemNodes.length; m++) {
-        const mn = currentMemNodes[m];
-        const a = mn.angle + simTime * mn.speed;
-        const r = mn.ring * (1 - morph * 0.1) + morph * 28;
-        const lx = Math.cos(a) * r * (scaleX * 1.05);
-        const ly = Math.sin(a) * r * (scaleY * 0.92);
-        const mx = cx + lx * cosT - ly * sinT;
-        const my = cy + lx * sinT + ly * cosT;
-        memCoords.push({ x: mx, y: my, mem: mn.mem });
-
-        ctx.beginPath();
-        const midX = (srcX + mx) * 0.5 + (cy - my) * 0.12;
-        const midY = (srcY + my) * 0.5 - (srcX - mx) * 0.08;
-        ctx.moveTo(srcX, srcY);
-        ctx.quadraticCurveTo(midX, midY, mx, my);
-        ctx.strokeStyle = morph > 0.35 ? 'rgba(240, 171, 252, 0.55)' : 'rgba(232, 121, 249, 0.36)';
-        ctx.lineWidth = morph > 0.35 ? 1.3 : 1.0;
-        ctx.stroke();
-
-        const glowR = morph > 0.35 ? 10 : 6.5;
-        const starGrad = ctx.createRadialGradient(mx, my, 0.5, mx, my, glowR);
-        starGrad.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
-        starGrad.addColorStop(0.35, 'rgba(240, 171, 252, 0.85)');
-        starGrad.addColorStop(1, 'rgba(192, 38, 211, 0)');
-        ctx.fillStyle = starGrad;
-        ctx.beginPath();
-        ctx.arc(mx, my, glowR, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      memoryScreenCoordsRef.current = memCoords;
+      entityScreenCoordsRef.current = screenCoords;
 
       // Pure Pitch-Black Event Horizon Sphere + White-Lilac Photon Ring
-      const bhR = 26 + morph * 16;
-
+      const bhR = 26 + morph * 15;
       const photonGrad = ctx.createRadialGradient(cx, cy, bhR * 0.92, cx, cy, bhR * 1.5);
       photonGrad.addColorStop(0, 'rgba(255, 255, 255, 0.96)');
       photonGrad.addColorStop(0.24, 'rgba(245, 208, 254, 0.78)');
@@ -298,7 +311,7 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       ctx.arc(cx, cy, bhR + 0.4, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Official AURION "A" Emblem suspended inside the Pitch-Black Event Horizon
+      // Official AURION "A" Emblem suspended inside the Black Hole
       ctx.save();
       ctx.translate(cx, cy);
       const aScale = (bhR / 34) * 0.62;
@@ -336,7 +349,7 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [particles, arcItems]);
+  }, [ambientStars, arcItems]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -350,16 +363,20 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
       return;
     }
 
-    let closest: GalaxyMemoryItem | null = null;
-    let minD = 26;
-    for (const item of memoryScreenCoordsRef.current) {
+    let closest: GalaxyEntityDot | null = null;
+    let minD = 22;
+    for (const item of entityScreenCoordsRef.current) {
       const d = Math.hypot(clickX - item.x, clickY - item.y);
       if (d < minD) {
         minD = d;
-        closest = item.mem;
+        closest = item.dot;
       }
     }
-    setSelectedMemory(closest);
+    if (closest?.kind === 'module' && closest.moduleId) {
+      onSelectModule(closest.moduleId);
+    } else if (closest?.kind === 'memory' && closest.memory) {
+      setSelectedMemory(closest.memory);
+    }
   };
 
   return (
@@ -408,7 +425,7 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
         className="absolute inset-0 w-full h-full cursor-pointer"
       />
 
-      {/* Curved Orbital Arc with 3D Glossy Purple Glass Icons + High-Contrast Legible Labels */}
+      {/* Curved Orbital Arc with Moving Fractal 3D Purple Glass Icons + Legible Labels */}
       <div className="absolute inset-0 pointer-events-none">
         {arcItems.map(({ node, idx, rad }) => {
           const isSelected = activeModule === node.id;
@@ -430,29 +447,62 @@ export const AurionGalaxyStage: React.FC<AurionGalaxyStageProps> = ({
               }}
               className="pointer-events-auto group absolute -translate-y-1/2 flex items-center gap-2.5 focus:outline-none transition-all duration-400"
             >
-              {/* 3D Glossy Purple-Obsidian Orb Medallion Icon (AURION Visual ID) */}
+              {/* 3D Glass Icon Badge with Live Animated Fractal Mandala Backdrop */}
               <div
-                className={`relative w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-400 ${
+                className={`relative w-8 h-8 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-400 ${
                   isSelected || isHovered ? 'scale-110 -translate-y-0.5' : ''
                 }`}
                 style={{
                   background:
                     isSelected || isHovered
-                      ? 'linear-gradient(145deg, #F0ABFC 0%, #B5179E 45%, #3B0764 100%)'
-                      : 'linear-gradient(145deg, #581C87 0%, #24073F 58%, #0B0214 100%)',
+                      ? 'linear-gradient(145deg, #D946EF 0%, #7E22CE 52%, #1E0536 100%)'
+                      : 'linear-gradient(145deg, #3B0764 0%, #170329 65%, #07010D 100%)',
                   boxShadow:
                     isSelected || isHovered
-                      ? 'inset 0 2px 3px rgba(255,255,255,0.65), inset 0 -3px 6px rgba(45,6,78,0.85), 0 6px 18px rgba(217,70,239,0.55), 0 0 0 1px rgba(250,232,255,0.85)'
-                      : 'inset 0 1.5px 2px rgba(245,208,254,0.35), inset 0 -3px 5px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.85), 0 0 0 1px rgba(192,38,211,0.45)',
+                      ? 'inset 0 2px 3px rgba(255,255,255,0.6), inset 0 -3px 6px rgba(20,2,36,0.9), 0 6px 18px rgba(217,70,239,0.55), 0 0 0 1px rgba(250,232,255,0.85)'
+                      : 'inset 0 1.5px 2px rgba(245,208,254,0.32), inset 0 -3px 5px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.85), 0 0 0 1px rgba(192,38,211,0.45)',
                 }}
               >
-                {/* 3D Top Glass Specular Dome Highlight */}
-                <span className="absolute top-[2px] left-[4px] right-[4px] h-[38%] rounded-t-lg bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+                {/* Live Rotating Geometric Fractal Backdrop */}
+                <svg
+                  viewBox="0 0 40 40"
+                  className="absolute inset-0 w-full h-full pointer-events-none animate-spin-slow opacity-75"
+                  style={{ animationDuration: isSelected || isHovered ? '6s' : '16s' }}
+                >
+                  <polygon
+                    points="20,3 35,29 5,29"
+                    fill="none"
+                    stroke="#F0ABFC"
+                    strokeWidth="0.85"
+                    strokeOpacity="0.65"
+                  />
+                  <polygon
+                    points="20,37 5,11 35,11"
+                    fill="none"
+                    stroke="#C084FC"
+                    strokeWidth="0.85"
+                    strokeOpacity="0.55"
+                  />
+                  <circle
+                    cx="20"
+                    cy="20"
+                    r="11"
+                    fill="none"
+                    stroke="#FAE8FF"
+                    strokeWidth="0.65"
+                    strokeDasharray="3 2"
+                    strokeOpacity="0.5"
+                  />
+                </svg>
+
+                {/* Top 3D Specular Glass Highlight */}
+                <span className="absolute top-[2px] left-[4px] right-[4px] h-[36%] rounded-t-lg bg-gradient-to-b from-white/35 to-transparent pointer-events-none" />
+
                 <node.Icon
                   className={`relative z-10 w-4 h-4 transition-colors ${
                     isSelected || isHovered
-                      ? 'text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.6)]'
-                      : 'text-[#F5D0FE] group-hover:text-white'
+                      ? 'text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.85)]'
+                      : 'text-[#F5D0FE] group-hover:text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
                   }`}
                 />
               </div>
