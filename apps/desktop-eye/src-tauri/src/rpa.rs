@@ -1,11 +1,9 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use enigo::{Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use image::codecs::jpeg::JpegEncoder;
-use rdev::{listen, Event, EventType, Key as RdevKey};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
@@ -30,50 +28,96 @@ pub struct InputCommand {
     pub text: Option<String>,
 }
 
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetAsyncKeyState(vKey: i32) -> i16;
+}
+
 /// Inicia listener global em background para ESC 2x (<600ms) ou Ctrl+Alt+K
+/// No Windows usa GetAsyncKeyState (sem WH_KEYBOARD_LL) para não duplicar acentos nem interferir em Alt+Tab/Win.
 pub fn start_panic_hotkey_listener(app_handle: AppHandle) {
     thread::spawn(move || {
-        let last_esc = Mutex::new(Instant::now() - Duration::from_secs(10));
-        let ctrl_held = Mutex::new(false);
-        let alt_held = Mutex::new(false);
+        #[cfg(target_os = "windows")]
+        {
+            const VK_ESCAPE: i32 = 0x1B;
+            const VK_CONTROL: i32 = 0x11;
+            const VK_MENU: i32 = 0x12; // Alt
+            const VK_K: i32 = 0x4B;
 
-        let callback = move |event: Event| match event.event_type {
-            EventType::KeyPress(key) => match key {
-                RdevKey::Escape => {
-                    let mut guard = last_esc.lock().unwrap();
+            let mut was_esc_down = false;
+            let mut was_combo_down = false;
+            let mut last_esc = Instant::now() - Duration::from_secs(10);
+
+            loop {
+                thread::sleep(Duration::from_millis(35));
+                let esc_down = unsafe { (GetAsyncKeyState(VK_ESCAPE) as u16 & 0x8000) != 0 };
+                let ctrl_down = unsafe { (GetAsyncKeyState(VK_CONTROL) as u16 & 0x8000) != 0 };
+                let alt_down = unsafe { (GetAsyncKeyState(VK_MENU) as u16 & 0x8000) != 0 };
+                let k_down = unsafe { (GetAsyncKeyState(VK_K) as u16 & 0x8000) != 0 };
+
+                if esc_down && !was_esc_down {
                     let now = Instant::now();
-                    if now.duration_since(*guard) <= Duration::from_millis(600) {
+                    if now.duration_since(last_esc) <= Duration::from_millis(600) {
                         trigger_panic_abort(&app_handle, "ESC duplo pressionado");
                     }
-                    *guard = now;
+                    last_esc = now;
                 }
-                RdevKey::ControlLeft | RdevKey::ControlRight => {
-                    *ctrl_held.lock().unwrap() = true;
-                }
-                RdevKey::Alt | RdevKey::AltGr => {
-                    *alt_held.lock().unwrap() = true;
-                }
-                RdevKey::KeyK => {
-                    if *ctrl_held.lock().unwrap() && *alt_held.lock().unwrap() {
-                        trigger_panic_abort(&app_handle, "Atalho Ctrl+Alt+K acionado");
-                    }
-                }
-                _ => {}
-            },
-            EventType::KeyRelease(key) => match key {
-                RdevKey::ControlLeft | RdevKey::ControlRight => {
-                    *ctrl_held.lock().unwrap() = false;
-                }
-                RdevKey::Alt | RdevKey::AltGr => {
-                    *alt_held.lock().unwrap() = false;
-                }
-                _ => {}
-            },
-            _ => {}
-        };
+                was_esc_down = esc_down;
 
-        if let Err(err) = listen(callback) {
-            eprintln!("[AURION PANIC LISTENER ERROR]: {:?}", err);
+                let combo_down = ctrl_down && alt_down && k_down;
+                if combo_down && !was_combo_down {
+                    trigger_panic_abort(&app_handle, "Atalho Ctrl+Alt+K acionado");
+                }
+                was_combo_down = combo_down;
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            use rdev::{listen, Event, EventType, Key as RdevKey};
+            use std::sync::Mutex;
+            let last_esc = Mutex::new(Instant::now() - Duration::from_secs(10));
+            let ctrl_held = Mutex::new(false);
+            let alt_held = Mutex::new(false);
+
+            let callback = move |event: Event| match event.event_type {
+                EventType::KeyPress(key) => match key {
+                    RdevKey::Escape => {
+                        let mut guard = last_esc.lock().unwrap();
+                        let now = Instant::now();
+                        if now.duration_since(*guard) <= Duration::from_millis(600) {
+                            trigger_panic_abort(&app_handle, "ESC duplo pressionado");
+                        }
+                        *guard = now;
+                    }
+                    RdevKey::ControlLeft | RdevKey::ControlRight => {
+                        *ctrl_held.lock().unwrap() = true;
+                    }
+                    RdevKey::Alt | RdevKey::AltGr => {
+                        *alt_held.lock().unwrap() = true;
+                    }
+                    RdevKey::KeyK => {
+                        if *ctrl_held.lock().unwrap() && *alt_held.lock().unwrap() {
+                            trigger_panic_abort(&app_handle, "Atalho Ctrl+Alt+K acionado");
+                        }
+                    }
+                    _ => {}
+                },
+                EventType::KeyRelease(key) => match key {
+                    RdevKey::ControlLeft | RdevKey::ControlRight => {
+                        *ctrl_held.lock().unwrap() = false;
+                    }
+                    RdevKey::Alt | RdevKey::AltGr => {
+                        *alt_held.lock().unwrap() = false;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            };
+
+            if let Err(err) = listen(callback) {
+                eprintln!("[AURION PANIC LISTENER ERROR]: {:?}", err);
+            }
         }
     });
 }
