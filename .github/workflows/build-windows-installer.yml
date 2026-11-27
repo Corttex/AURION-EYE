@@ -1,0 +1,43 @@
+name: Build Windows Installer (No-Admin NSIS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop-eye/**'
+      - 'packages/shared-protocol/**'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install workspace deps & build shared protocol
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm --filter @aurion/shared-protocol build
+
+      - name: Build Tauri Per-User Installer (.exe without admin)
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: apps/desktop-eye
+          args: --bundles nsis
+
+      - name: Upload Windows Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aurion-Eye-Windows-Sem-Admin-Setup
+          path: apps/desktop-eye/src-tauri/target/release/bundle/nsis/*.exe
