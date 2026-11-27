@@ -19,80 +19,91 @@ if (Test-Path $SourceIcon) {
     Copy-Item -Force $SourceIcon (Join-Path $InstallDir "icon.ico")
 }
 
-Write-Host "[2/4] Criando launcher standalone..."
-$LauncherPs1 = @'
-$ErrorActionPreference = "SilentlyContinue"
-$InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DistDir = Join-Path $InstallDir "dist"
-$Port = 1425
+Write-Host "[2/4] Criando servidor local leve (Node/Python) + launcher..."
+$ServerJs = @'
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
 
-# Check if port 1425 is already serving
-$Listening = $false
-try {
-    $tcp = New-Object System.Net.Sockets.TcpClient
-    $iar = $tcp.BeginConnect("127.0.0.1", $Port, $null, $null)
-    if ($iar.AsyncWaitHandle.WaitOne(200, $false)) {
-        $tcp.EndConnect($iar)
-        $Listening = $true
-    }
-    $tcp.Close()
-} catch {}
+const distDir = path.join(__dirname, "dist");
+const port = 1425;
+const mime = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".json": "application/json",
+};
 
-if (-not $Listening) {
-    $PyCmd = Get-Command python -ErrorAction SilentlyContinue
-    if ($PyCmd) {
-        Start-Process -FilePath $PyCmd.Source -ArgumentList "-m http.server $Port --bind 127.0.0.1 --directory `"$DistDir`"" -WindowStyle Hidden
-    } else {
-        $NpxCmd = Get-Command npx -ErrorAction SilentlyContinue
-        if ($NpxCmd) {
-            Start-Process -FilePath $NpxCmd.Source -ArgumentList "--yes serve `"$DistDir`" -l $Port" -WindowStyle Hidden
-        }
-    }
-    Start-Sleep -Milliseconds 700
-}
+const server = http.createServer((req, res) => {
+  const urlPath = (req.url || "/").split("?")[0];
+  let filePath = path.join(distDir, urlPath === "/" ? "index.html" : urlPath);
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(distDir, "index.html");
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, { "Content-Type": mime[ext] || "application/octet-stream" });
+  fs.createReadStream(filePath).pipe(res);
+});
 
-$Url = "http://127.0.0.1:$Port"
-$Edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-$Edge64 = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-$Chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-$UserData = Join-Path $InstallDir "profile"
+server.on("error", () => process.exit(0));
+server.listen(port, "127.0.0.1");
+'@
+Set-Content -Path (Join-Path $InstallDir "server.cjs") -Value $ServerJs -Encoding UTF8
 
-if (Test-Path $Edge) {
-    Start-Process -FilePath $Edge -ArgumentList "--app=$Url --window-size=980,620 --user-data-dir=`"$UserData`""
-} elseif (Test-Path $Edge64) {
-    Start-Process -FilePath $Edge64 -ArgumentList "--app=$Url --window-size=980,620 --user-data-dir=`"$UserData`""
-} elseif (Test-Path $Chrome) {
-    Start-Process -FilePath $Chrome -ArgumentList "--app=$Url --window-size=980,620 --user-data-dir=`"$UserData`""
+# Clean up old VBS if present
+$OldVbs = Join-Path $InstallDir "AurionEye.vbs"
+if (Test-Path $OldVbs) { Remove-Item -Force $OldVbs }
+
+$EdgePath = @(
+    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    "C:\Program Files\Google\Chrome\Application\chrome.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $EdgePath) { $EdgePath = "msedge.exe" }
+
+$NodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source
+$PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+
+if ($NodeExe) {
+    $StartServerLine = "start `"`" /B `"$NodeExe`" `"%~dp0server.cjs`""
+} elseif ($PythonExe) {
+    $StartServerLine = "start `"`" /B `"$PythonExe`" -m http.server 1425 --bind 127.0.0.1 --directory `"%~dp0dist`""
 } else {
-    Start-Process $Url
+    $StartServerLine = "echo Nenhum runtime Node/Python encontrado"
 }
-'@
 
-Set-Content -Path (Join-Path $InstallDir "launch-aurion.ps1") -Value $LauncherPs1 -Encoding UTF8
+$LaunchCmd = @"
+@echo off
+cd /d "%~dp0"
+$StartServerLine
+timeout /t 1 /nobreak >nul
+start "" "$EdgePath" --app=http://127.0.0.1:1425 --window-size=980,620 --user-data-dir="%~dp0profile"
+exit
+"@
 
-$LauncherVbs = @'
-Set shell = CreateObject("WScript.Shell")
-dir = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
-shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & dir & "\launch-aurion.ps1""", 0, False
-'@
-$VbsPath = Join-Path $InstallDir "AurionEye.vbs"
-Set-Content -Path $VbsPath -Value $LauncherVbs -Encoding ASCII
+$LaunchCmdPath = Join-Path $InstallDir "launch.cmd"
+Set-Content -Path $LaunchCmdPath -Value $LaunchCmd -Encoding ASCII
 
-Write-Host "[3/4] Criando atalho na Area de Trabalho e Menu Iniciar..."
+Write-Host "[3/4] Atualizando atalhos na Area de Trabalho e Menu Iniciar..."
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "AURION Eye.lnk"
 $StartMenuLnk = Join-Path ([Environment]::GetFolderPath("Programs")) "AURION Eye.lnk"
 
 foreach ($LnkPath in @($DesktopLnk, $StartMenuLnk)) {
     $Shortcut = $WshShell.CreateShortcut($LnkPath)
-    $Shortcut.TargetPath = "wscript.exe"
-    $Shortcut.Arguments = "`"$VbsPath`""
+    $Shortcut.TargetPath = $LaunchCmdPath
+    $Shortcut.Arguments = ""
     $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.WindowStyle = 7
     $Shortcut.Description = "AURION Eye - Singularity HUD"
     $IconFile = Join-Path $InstallDir "icon.ico"
     if (Test-Path $IconFile) { $Shortcut.IconLocation = $IconFile }
     $Shortcut.Save()
 }
 
-Write-Host "[4/4] Instalacao concluida com sucesso (ZERO permissao de admin)!" -ForegroundColor Green
-Write-Host "Atalho criado na Area de Trabalho: $DesktopLnk" -ForegroundColor Cyan
+Write-Host "[4/4] Instalacao concluida com sucesso (ZERO VBS / ZERO Admin)!" -ForegroundColor Green
+Write-Host "Atalho atualizado: $DesktopLnk" -ForegroundColor Cyan
